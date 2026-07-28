@@ -1,0 +1,1884 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>拼多多数据看板</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:#f0f2f5;color:#333}
+.layout{display:flex;min-height:100vh}
+.sidebar{width:220px;background:#001529;color:#fff;padding:20px 0;flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto}
+.sidebar h2{text-align:center;font-size:16px;margin-bottom:30px;padding:0 15px;opacity:0.9}
+.nav-item{padding:12px 24px;cursor:pointer;font-size:14px;transition:0.2s;border-left:3px solid transparent}
+.nav-item:hover{background:rgba(255,255,255,0.08)}
+.nav-item.active{background:#1890ff;border-left-color:#69c0ff}
+.main{flex:1;padding:24px;overflow-y:auto}
+.kpi-row{display:flex;gap:16px;margin-bottom:24px}
+.kpi-card{flex:1;background:#fff;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,0.08);text-align:center}
+.kpi-card .value{font-size:32px;font-weight:700;color:#1890ff}
+.kpi-card .label{font-size:13px;color:#999;margin-top:4px}
+.panel{background:#fff;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,0.08);margin-bottom:24px}
+.panel h3{font-size:15px;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid #f0f0f0;color:#333}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#fafafa;padding:10px 12px;text-align:left;border-bottom:2px solid #f0f0f0;color:#666;font-weight:600}
+td{padding:10px 12px;border-bottom:1px solid #f0f0f0}
+.warn{color:#fa541c;font-weight:600}
+.ok{color:#52c41a}
+.status{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.status.danger{background:#fff1f0;color:#cf1322}
+.status.warning{background:#fff7e6;color:#d46b08}
+.status.ok{background:#f6ffed;color:#389e0d}
+.filter-row{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+.filter-row label{font-size:13px;color:#666}
+.filter-row select,.filter-row input{padding:6px 10px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px}
+.filter-row button{padding:6px 16px;background:#1890ff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px}
+.filter-row button:hover{background:#096dd9}
+.chart-container{width:100%;height:350px;position:relative;background:#fafafa;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px}
+.date-filter{display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.date-btn{padding:4px 12px;border:1px solid #d9d9d9;border-radius:14px;background:#fff;color:#666;font-size:12px;cursor:pointer;transition:0.2s;white-space:nowrap}
+.date-btn:hover{border-color:#1890ff;color:#1890ff}
+.date-btn.active{background:#1890ff;color:#fff;border-color:#1890ff}
+.custom-range{display:none;align-items:center;gap:6px;margin-left:4px}
+.custom-range input[type=date]{padding:3px 6px;border:1px solid #d9d9d9;border-radius:4px;font-size:12px;width:125px}
+.custom-range button{padding:3px 10px;background:#1890ff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px}
+.custom-range button:hover{background:#096dd9}
+/* 日期范围选择器 */
+.drp-wrap{position:relative;display:inline-block}
+.drp-panel{display:none;position:fixed;background:#fff;border:1px solid #e8e8e8;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,0.12);z-index:9999;font-size:13px;user-select:none}
+.drp-body{display:flex}
+.drp-side{width:100px;border-right:1px solid #f0f0f0;padding:8px 0;background:#fafafa;border-radius:10px 0 0 10px}
+.drp-preset{display:block;width:100%;padding:8px 14px;cursor:pointer;color:#555;font-size:12px;border:none;background:none;text-align:left;transition:0.15s}
+.drp-preset:hover{background:#e6f7ff;color:#1890ff}
+.drp-preset.sel{background:#e6f7ff;color:#1890ff;font-weight:600}
+.drp-cals{display:flex;padding:10px 14px;gap:20px}
+.drp-mth{width:196px}
+.drp-mth-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;height:28px}
+.drp-mth-head .arr{width:22px;height:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:4px;color:#999;font-size:12px;border:none;background:none}
+.drp-mth-head .arr:hover{background:#f0f0f0;color:#333}
+.drp-mth-tit{font-size:13px;font-weight:600;color:#333}
+.drp-wdays{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;margin-bottom:2px}
+.drp-wdays span{font-size:10px;color:#bbb;padding:2px 0}
+.drp-days{display:grid;grid-template-columns:repeat(7,1fr);text-align:center}
+.drp-day{padding:5px 0;cursor:pointer;border-radius:4px;font-size:12px;color:#333;transition:0.1s;border:none;background:none}
+.drp-day:hover{background:#e6f7ff}
+.drp-day.off{color:#ddd;cursor:default;pointer-events:none}
+.drp-day.tdy{border:1px solid #1890ff}
+.drp-day.inr{background:#e6f7ff;border-radius:0}
+.drp-day.sta{background:#1890ff;color:#fff;border-radius:4px 0 0 4px}
+.drp-day.end{background:#1890ff;color:#fff;border-radius:0 4px 4px 0}
+.drp-day.one{background:#1890ff;color:#fff;border-radius:4px}
+.drp-foot{padding:8px 14px;border-top:1px solid #f0f0f0;display:flex;align-items:center;gap:6px;font-size:12px}
+.drp-foot span{color:#333}
+.drp-foot .val{color:#1890ff;font-weight:600}
+/* DSR 表格日期选择器 — 浅蓝风格 */
+#dsr-panel .date-btn.active{background:#e6f7ff!important;color:#1890ff!important;border-color:#91d5ff!important}
+#dsr-drp .drp-side{width:100px;padding:6px 0;background:#fafafa;border-right:1px solid #f0f0f0;border-radius:10px 0 0 10px}
+#dsr-drp .drp-preset{display:block;width:100%;padding:7px 12px;cursor:pointer;color:#555;font-size:12px;border:none;background:none;text-align:left;border-left:3px solid transparent;transition:0.15s}
+#dsr-drp .drp-preset:hover{background:#f5f5f5;color:#1890ff}
+#dsr-drp .drp-preset.sel{color:#1890ff;font-weight:600;border-left-color:#1890ff;background:#e6f7ff}
+#dsr-drp .drp-cals{padding:10px 14px;gap:20px}
+#dsr-drp .drp-mth{width:210px}
+#dsr-drp .drp-mth-head{position:relative;display:flex;align-items:center;justify-content:center;margin-bottom:6px;height:30px}
+#dsr-drp .drp-mth-head .arr{width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:4px;color:#999;font-size:14px;border:none;background:none;position:absolute}
+#dsr-drp .drp-mth-head .arr[data-nav="-1"]{left:2px}
+#dsr-drp .drp-mth-head .arr[data-nav="1"]{right:2px}
+#dsr-drp .drp-mth-head>span:last-child{display:none}
+#dsr-drp .drp-mth-head .arr:hover{background:#f0f0f0;color:#1890ff}
+#dsr-drp .drp-mth-tit{font-size:13px;font-weight:600;color:#333}
+#dsr-drp .drp-wdays span{font-size:10px;color:#bbb;padding:3px 0}
+#dsr-drp .drp-day{padding:7px 0;cursor:pointer;border-radius:4px;font-size:12px;color:#333;transition:0.1s;border:none;background:none}
+#dsr-drp .drp-day:hover{background:#f0f7ff}
+#dsr-drp .drp-day.off{color:#ddd;cursor:default;pointer-events:none}
+#dsr-drp .drp-day.tdy{border:1px solid #1890ff;font-weight:600}
+#dsr-drp .drp-day.inr{background:#f5f9ff;border-radius:0}
+#dsr-drp .drp-day.sta{background:#e6f7ff;color:#1890ff;border-radius:4px 0 0 4px;font-weight:600}
+#dsr-drp .drp-day.end{background:#e6f7ff;color:#1890ff;border-radius:0 4px 4px 0;font-weight:600}
+#dsr-drp .drp-day.one{background:#e6f7ff;color:#1890ff;border-radius:4px;font-weight:600}
+#dsr-drp .drp-foot{padding:8px 14px;border-top:1px solid #f0f0f0;display:flex;align-items:center;gap:6px;font-size:12px}
+#dsr-drp .drp-foot span{color:#333}
+#dsr-drp .drp-foot .val{color:#1890ff;font-weight:600}
+
+/* DSR KPI 日期选择器 — 灰色风格 */
+#dsr-kpi-custom-btn:hover{border-color:#999!important;color:#555!important}
+#dsr-kpi-drp .drp-side{width:100px;padding:6px 0;background:#fafafa;border-right:1px solid #f0f0f0;border-radius:10px 0 0 10px}
+#dsr-kpi-drp .drp-preset{display:block;width:100%;padding:7px 12px;cursor:pointer;color:#555;font-size:12px;border:none;background:none;text-align:left;border-left:3px solid transparent;transition:0.15s}
+#dsr-kpi-drp .drp-preset:hover{background:#f0f0f0;color:#333}
+#dsr-kpi-drp .drp-preset.sel{color:#333;font-weight:600;border-left-color:#999;background:#e8e8e8}
+#dsr-kpi-drp .drp-cals{padding:10px 14px;gap:20px}
+#dsr-kpi-drp .drp-mth{width:210px}
+#dsr-kpi-drp .drp-mth-head{position:relative;display:flex;align-items:center;justify-content:center;margin-bottom:6px;height:30px}
+#dsr-kpi-drp .drp-mth-head .arr{width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:4px;color:#999;font-size:14px;border:none;background:none;position:absolute}
+#dsr-kpi-drp .drp-mth-head .arr[data-nav="-1"]{left:2px}
+#dsr-kpi-drp .drp-mth-head .arr[data-nav="1"]{right:2px}
+#dsr-kpi-drp .drp-mth-head>span:last-child{display:none}
+#dsr-kpi-drp .drp-mth-head .arr:hover{background:#f0f0f0;color:#555}
+#dsr-kpi-drp .drp-mth-tit{font-size:13px;font-weight:600;color:#333}
+#dsr-kpi-drp .drp-wdays span{font-size:10px;color:#bbb;padding:3px 0}
+#dsr-kpi-drp .drp-day{padding:7px 0;cursor:pointer;border-radius:4px;font-size:12px;color:#333;transition:0.1s;border:none;background:none}
+#dsr-kpi-drp .drp-day:hover{background:#f0f0f0}
+#dsr-kpi-drp .drp-day.off{color:#ddd;cursor:default;pointer-events:none}
+#dsr-kpi-drp .drp-day.tdy{border:1px solid #999;font-weight:600}
+#dsr-kpi-drp .drp-day.inr{background:#f5f5f5;border-radius:0}
+#dsr-kpi-drp .drp-day.sta{background:#e0e0e0;color:#333;border-radius:4px 0 0 4px;font-weight:600}
+#dsr-kpi-drp .drp-day.end{background:#e0e0e0;color:#333;border-radius:0 4px 4px 0;font-weight:600}
+#dsr-kpi-drp .drp-day.one{background:#e0e0e0;color:#333;border-radius:4px;font-weight:600}
+#dsr-kpi-drp .drp-foot{padding:8px 14px;border-top:1px solid #f0f0f0;display:flex;align-items:center;gap:6px;font-size:12px}
+#dsr-kpi-drp .drp-foot span{color:#555}
+#dsr-kpi-drp .drp-foot .val{color:#333;font-weight:600}
+#status-line{text-align:center;padding:20px;color:#bbb;font-size:12px;min-height:60px}
+.pagination{display:flex;align-items:center;justify-content:space-between;margin-top:12px;font-size:13px;color:#666;flex-wrap:wrap;gap:8px}
+.pagination .info{color:#999}
+.pagination select{padding:4px 8px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px}
+.pagination button{padding:5px 12px;border:1px solid #d9d9d9;border-radius:4px;background:#fff;cursor:pointer;font-size:13px;color:#333;min-width:32px}
+.pagination button:hover{border-color:#1890ff;color:#1890ff}
+.pagination button.active{background:#1890ff;color:#fff;border-color:#1890ff}
+.pagination button:disabled{color:#ccc;cursor:not-allowed;border-color:#eee}
+#star-panel table{border:2px solid #bbb;border-collapse:collapse;width:100%}
+#star-panel th{background:#f0f0f0;border:1px solid #ccc;padding:8px 10px;font-weight:600;color:#333}
+#star-panel td{border:1px solid #d0d0d0;padding:6px 10px;font-size:12px}
+#star-panel tr:nth-child(even) td{background:#fafafa}
+#star-panel tr:hover td{background:#e6f7ff}
+</style>
+</head>
+<body>
+<div class="layout">
+  <div class="sidebar">
+    <h2>📊 拼多多看板</h2>
+    <div class="nav-item active" data-target="home-panel">🏠 首页</div>
+    <div class="nav-item" data-target="store-panel">店铺评分</div>
+    <div class="nav-item" data-target="trend-panel">商品评分趋势</div>
+    <div class="nav-item" data-target="star-panel">综合体验星级</div>
+    <div class="nav-item" data-target="dsr-panel">DSR评分</div>
+  </div>
+  <div class="main">
+    <div id="alert-section" style="background:#fff;border-radius:8px;padding:10px 16px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,0.08);display:flex;align-items:center;gap:8px">
+      <span style="font-size:14px">⚠️</span>
+      <span style="font-size:13px;color:#333">低评分预警阈值：</span>
+      <span style="display:flex;align-items:center;gap:4px">
+        <span style="font-size:13px;color:#666">&lt;</span>
+        <select id="alert-threshold" style="padding:3px 6px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px">
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="30">30</option>
+          <option value="40" selected>40</option>
+          <option value="50">50</option>
+          <option value="60">60</option>
+          <option value="70">70</option>
+          <option value="80">80</option>
+          <option value="90">90</option>
+        </select>
+        <span style="font-size:13px;color:#666">%</span>
+      </span>
+      <span style="color:#999;font-size:12px;margin-left:8px" id="alert-date"></span>
+    </div>
+
+    <div id="alert-bar" style="display:none;background:#fff2f0;border:1px solid #ffccc7;border-radius:8px;padding:12px 16px;margin-bottom:16px">
+      <div id="alert-cards" style="display:flex;gap:10px;flex-wrap:wrap"></div>
+    </div>
+
+    <div class="kpi-row" id="global-kpi-row">
+      <div class="kpi-card"><div class="value" id="kpi-stores">⏳</div><div class="label">店铺数</div></div>
+      <div class="kpi-card"><div class="value" id="kpi-products">⏳</div><div class="label">商品数</div></div>
+      <div class="kpi-card"><div class="value" id="kpi-dates">⏳</div><div class="label">日期跨度</div></div>
+      <div class="kpi-card"><div class="value" id="kpi-avg-rating">⏳</div><div class="label">平均评分</div></div>
+      <div class="kpi-card" id="kpi-low-card"><div class="value" id="kpi-low">⏳</div><div class="label">低评分预警</div></div>
+    </div>
+
+    <div class="panel" id="home-panel">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <span style="font-size:13px;color:#666">品牌：</span>
+        <select id="home-brand" style="padding:5px 10px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px">
+          <option value="">全部</option>
+        </select>
+      </div>
+      <h3>📊 近90天评分总览（加权平均）</h3>
+      <div class="date-filter" id="rating-filter">
+        <button class="date-btn" data-range="7">近7天</button>
+        <button class="date-btn" data-range="15">近15天</button>
+        <button class="date-btn active" data-range="30">近30天</button>
+        <span class="drp-wrap">
+          <button class="date-btn" id="rating-custom-btn">自定义</button>
+          <div class="drp-panel" id="rating-drp">
+            <div class="drp-body">
+              <div class="drp-side">
+                <button class="drp-preset" data-d="today">今日</button>
+                <button class="drp-preset" data-d="yesterday">昨日</button>
+                <button class="drp-preset sel" data-d="7d">近7日</button>
+                <button class="drp-preset" data-d="30d">近30日</button>
+                <button class="drp-preset" data-d="this_week">本周</button>
+                <button class="drp-preset" data-d="this_month">本月</button>
+              </div>
+              <div class="drp-cals">
+                <div class="drp-mth" id="rating-cal-left"></div>
+                <div class="drp-mth" id="rating-cal-right"></div>
+              </div>
+            </div>
+            <div class="drp-foot"><span>已选：</span><span class="val" id="rating-range-text"></span></div>
+          </div>
+        </span>
+      </div>
+      <div class="chart-container" id="home-rating-chart" style="height:350px">加载中...</div>
+
+      <h3 style="margin-top:20px">📈 商品评分与评价数趋势（加权平均）</h3>
+      <div class="date-filter" id="product-filter">
+        <button class="date-btn" data-range="7">近7天</button>
+        <button class="date-btn" data-range="15">近15天</button>
+        <button class="date-btn active" data-range="30">近30天</button>
+        <span class="drp-wrap">
+          <button class="date-btn" id="product-custom-btn">自定义</button>
+          <div class="drp-panel" id="product-drp">
+            <div class="drp-body">
+              <div class="drp-side">
+                <button class="drp-preset" data-d="today">今日</button>
+                <button class="drp-preset" data-d="yesterday">昨日</button>
+                <button class="drp-preset sel" data-d="7d">近7日</button>
+                <button class="drp-preset" data-d="30d">近30日</button>
+                <button class="drp-preset" data-d="this_week">本周</button>
+                <button class="drp-preset" data-d="this_month">本月</button>
+              </div>
+              <div class="drp-cals">
+                <div class="drp-mth" id="product-cal-left"></div>
+                <div class="drp-mth" id="product-cal-right"></div>
+              </div>
+            </div>
+            <div class="drp-foot"><span>已选：</span><span class="val" id="product-range-text"></span></div>
+          </div>
+        </span>
+      </div>
+      <div class="chart-container" id="home-product-chart" style="height:350px">加载中...</div>
+    </div>
+
+    <div class="panel" id="alert-panel" style="display:none">
+      <h3>⚠️ 低评分预警（<40%）</h3>
+      <div style="overflow-x:auto"><table><thead><tr><th>店铺</th><th>品牌</th><th>日期</th><th>评分</th></tr></thead><tbody id="alert-tbody"></tbody></table></div>
+    </div>
+
+    <div class="panel" id="store-panel">
+      <h3>🏪 店铺评分</h3>
+      <div style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
+          <span style="font-size:13px;color:#666">日期：</span>
+          <button class="date-btn" data-range="7">近7天</button>
+          <button class="date-btn" data-range="15">近15天</button>
+          <button class="date-btn active" data-range="30">近30天</button>
+          <span class="drp-wrap">
+            <button class="date-btn" id="store-custom-btn">自定义</button>
+            <div class="drp-panel" id="store-drp">
+              <div class="drp-body">
+                <div class="drp-side">
+                  <button class="drp-preset" data-d="today">今日</button>
+                  <button class="drp-preset" data-d="yesterday">昨日</button>
+                  <button class="drp-preset sel" data-d="7d">近7日</button>
+                  <button class="drp-preset" data-d="30d">近30日</button>
+                  <button class="drp-preset" data-d="this_week">本周</button>
+                  <button class="drp-preset" data-d="this_month">本月</button>
+                </div>
+                <div class="drp-cals">
+                  <div class="drp-mth" id="store-cal-left"></div>
+                  <div class="drp-mth" id="store-cal-right"></div>
+                </div>
+              </div>
+              <div class="drp-foot"><span>已选：</span><span class="val" id="store-range-text"></span></div>
+            </div>
+          </span>
+          <span style="font-size:13px;color:#666;margin-left:8px">品牌：</span>
+          <select id="brand-filter"><option value="">全部</option></select>
+          <span style="font-size:13px;color:#666;margin-left:8px">店铺：</span>
+          <div style="position:relative;display:inline-block">
+            <input type="text" id="store-search" placeholder="选择或搜索店铺..." style="width:200px;padding:5px 8px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px" autocomplete="off">
+            <div id="store-dropdown" style="display:none;position:absolute;top:100%;left:0;width:200px;max-height:200px;overflow-y:auto;background:#fff;border:1px solid #d9d9d9;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:100;font-size:13px"></div>
+          </div>
+          <span id="store-hint" style="font-size:12px;color:#999"></span>
+          <button id="btn-filter">🔍 筛选</button>
+        </div>
+      </div>
+      <div id="store-tags" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;min-height:0"></div>
+      <div class="chart-container" id="store-chart-container" style="height:300px;margin-bottom:16px">加载中...</div>
+      <div style="overflow-x:auto"><table><thead><tr><th>店铺</th><th>品牌</th><th>日期</th><th>评分</th><th>状态</th></tr></thead><tbody id="store-tbody"></tbody></table></div>
+      <div class="pagination" id="store-pagination" style="display:none">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span>每页</span>
+          <select id="store-page-size">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+          </select>
+          <span>条</span>
+          <span class="info" id="store-page-info"></span>
+        </div>
+        <div style="display:flex;gap:4px" id="store-page-btns"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="trend-panel">
+      <h3>📈 商品评分 & 评价总数趋势</h3>
+      <div style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+          <span style="font-size:13px;color:#666">日期：</span>
+          <button class="date-btn" data-range="7">近7天</button>
+          <button class="date-btn" data-range="15">近15天</button>
+          <button class="date-btn active" data-range="30">近30天</button>
+          <span class="drp-wrap">
+            <button class="date-btn" id="trend-custom-btn">自定义</button>
+            <div class="drp-panel" id="trend-drp">
+              <div class="drp-body">
+                <div class="drp-side">
+                  <button class="drp-preset" data-d="today">今日</button>
+                  <button class="drp-preset" data-d="yesterday">昨日</button>
+                  <button class="drp-preset sel" data-d="7d">近7日</button>
+                  <button class="drp-preset" data-d="30d">近30日</button>
+                  <button class="drp-preset" data-d="this_week">本周</button>
+                  <button class="drp-preset" data-d="this_month">本月</button>
+                </div>
+                <div class="drp-cals">
+                  <div class="drp-mth" id="trend-cal-left"></div>
+                  <div class="drp-mth" id="trend-cal-right"></div>
+                </div>
+              </div>
+              <div class="drp-foot"><span>已选：</span><span class="val" id="trend-range-text"></span></div>
+            </div>
+          </span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <span style="font-size:13px;color:#666">店铺：</span>
+          <div style="position:relative">
+            <input type="text" id="trend-search" placeholder="选择或搜索店铺..." style="width:240px;padding:7px 10px;font-size:14px" autocomplete="off">
+            <div id="trend-dropdown" style="display:none;position:absolute;top:100%;left:0;width:240px;max-height:200px;overflow-y:auto;background:#fff;border:1px solid #d9d9d9;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:100;font-size:13px"></div>
+          </div>
+          <button id="btn-trend" style="padding:7px 18px;font-size:14px">📊 加载趋势</button>
+          <span style="font-size:13px;color:#666;margin-left:8px">品牌：</span>
+          <select id="trend-brand" style="padding:6px 8px;font-size:13px;border:1px solid #d9d9d9;border-radius:4px"><option value="">全部</option></select>
+          <span id="trend-hint" style="font-size:12px;color:#999"></span>
+        </div>
+        <div id="trend-tags" style="display:flex;flex-wrap:wrap;gap:4px;min-height:0"></div>
+      </div>
+      <div class="chart-container" id="chart-box-rating"><span style="color:#888">点击「加载趋势」查看图表</span></div>
+      <div class="chart-container" id="chart-box-reviews" style="margin-top:20px"><span style="color:#888">点击「加载趋势」查看图表</span></div>
+      <div style="margin-top:24px">
+        <h3 style="margin:0 0 10px 0;font-size:15px">📋 商品明细</h3>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <input type="text" id="trend-prod-search-id" placeholder="搜索ID..." style="width:140px;padding:5px 8px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px">
+          <div style="position:relative">
+            <input type="text" id="trend-prod-search-store" placeholder="搜索店铺..." style="width:160px;padding:5px 8px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px" autocomplete="off">
+            <div id="trend-prod-store-dd" style="display:none;position:absolute;top:100%;left:0;width:200px;max-height:200px;overflow-y:auto;background:#fff;border:1px solid #d9d9d9;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:100;font-size:13px"></div>
+          </div>
+          <input type="text" id="trend-prod-search-code" placeholder="搜索编码..." style="width:120px;padding:5px 8px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px">
+          <select id="trend-prod-brand" style="padding:5px 8px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px"><option value="">全部品牌</option></select>
+          <span style="font-size:12px;color:#666">日期：</span>
+          <input type="date" id="trend-prod-date-from" style="padding:4px 6px;border:1px solid #d9d9d9;border-radius:4px;font-size:12px;width:130px">
+          <span style="font-size:12px;color:#666">—</span>
+          <input type="date" id="trend-prod-date-to" style="padding:4px 6px;border:1px solid #d9d9d9;border-radius:4px;font-size:12px;width:130px">
+          <span style="font-size:12px;color:#999" id="trend-prod-filtered-hint"></span>
+        </div>
+        <div style="overflow-x:auto"><table><thead><tr>
+          <th>ID</th><th>标题</th><th>评价总数</th><th>商品评分</th><th>店铺名称</th><th>品牌</th><th>日期</th><th>商品名称</th><th>编码</th>
+        </tr></thead><tbody id="trend-product-tbody"></tbody></table></div>
+        <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <span style="font-size:13px;color:#888" id="trend-product-count"></span>
+          <span id="trend-product-pagination"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="star-panel">
+      <h3>⭐ 综合体验星级</h3>
+      <div style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
+          <span style="font-size:13px;color:#666">日期：</span>
+          <button class="date-btn" data-range="7">近7天</button>
+          <button class="date-btn" data-range="15">近15天</button>
+          <button class="date-btn active" data-range="30">近30天</button>
+          <span class="drp-wrap">
+            <button class="date-btn" id="star-custom-btn">自定义</button>
+            <div class="drp-panel" id="star-drp">
+              <div class="drp-body">
+                <div class="drp-side">
+                  <button class="drp-preset" data-d="today">今日</button>
+                  <button class="drp-preset" data-d="yesterday">昨日</button>
+                  <button class="drp-preset sel" data-d="7d">近7日</button>
+                  <button class="drp-preset" data-d="30d">近30日</button>
+                  <button class="drp-preset" data-d="this_week">本周</button>
+                  <button class="drp-preset" data-d="this_month">本月</button>
+                </div>
+                <div class="drp-cals">
+                  <div class="drp-mth" id="star-cal-left"></div>
+                  <div class="drp-mth" id="star-cal-right"></div>
+                </div>
+              </div>
+              <div class="drp-foot"><span>已选：</span><span class="val" id="star-range-text"></span></div>
+            </div>
+          </span>
+          <span style="font-size:13px;color:#666;margin-left:8px">品牌：</span>
+          <select id="star-brand"><option value="">全部</option></select>
+          <span style="font-size:13px;color:#666;margin-left:8px">店铺：</span>
+          <div style="position:relative">
+            <input type="text" id="star-search" placeholder="搜索店铺..." style="width:220px;padding:6px 10px;font-size:13px" autocomplete="off">
+            <div id="star-dropdown" style="display:none;position:absolute;top:100%;left:0;width:220px;max-height:200px;overflow-y:auto;background:#fff;border:1px solid #d9d9d9;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:100;font-size:13px"></div>
+          </div>
+        </div>
+        <div id="star-tags" style="display:flex;flex-wrap:wrap;gap:4px;min-height:0"></div>
+      </div>
+      <div class="kpi-row" style="margin-bottom:14px">
+        <div class="kpi-card"><div class="value" id="star-kpi-1" style="font-size:18px">-</div><div class="label" style="font-size:11px">近30天平台求助率</div></div>
+        <div class="kpi-card"><div class="value" id="star-kpi-2" style="font-size:18px">-</div><div class="label" style="font-size:11px">近90天评价得分排名</div></div>
+        <div class="kpi-card"><div class="value" id="star-kpi-3" style="font-size:18px">-</div><div class="label" style="font-size:11px">近30天严重劣质率</div></div>
+        <div class="kpi-card"><div class="value" id="star-kpi-4" style="font-size:18px">-</div><div class="label" style="font-size:11px">近30天物流违规率</div></div>
+        <div class="kpi-card"><div class="value" id="star-kpi-5" style="font-size:18px">-</div><div class="label" style="font-size:11px">近30天店铺活跃度</div></div>
+      </div>
+      <div style="overflow-x:auto"><table><thead><tr><th>店铺</th><th>品牌</th><th>日期</th><th>当前星级</th><th>体验维度</th><th>考核指标</th><th>店铺表现</th><th>下一星级标准</th></tr></thead><tbody id="star-tbody"></tbody></table></div>
+      <div class="pagination" id="star-pagination" style="display:none">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span>每页</span>
+          <select id="star-page-size">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+          </select>
+          <span>条</span>
+          <span class="info" id="star-page-info"></span>
+        </div>
+        <div style="display:flex;gap:4px" id="star-page-btns"></div>
+      </div>
+      <div id="star-count" style="margin-top:10px;font-size:12px;color:#999"></div>
+    </div>
+
+    <div class="panel">
+      <h3>📋 商品评分明细</h3>
+      <div class="filter-row">
+        <label>店铺：</label>
+        <select id="product-store"><option value="">全部</option></select>
+        <label>搜索：</label>
+        <input type="text" id="product-search" placeholder="商品标题/ID">
+        <button id="btn-search">🔍 搜索</button>
+      </div>
+      <div style="overflow-x:auto;max-height:500px;overflow-y:auto"><table><thead><tr><th>商品ID</th><th>标题</th><th>店铺</th><th>评分</th><th>评价数</th><th>日期</th></tr></thead><tbody id="product-tbody"></tbody></table></div>
+      <div id="product-count" style="margin-top:10px;font-size:12px;color:#999"></div>
+    </div>
+
+    <div class="panel" id="dsr-panel">
+      <h3>📊 DSR 评分</h3>
+      <div class="filter-row" style="margin-bottom:12px">
+        <label>品牌：</label>
+        <select id="dsr-brand-filter"><option value="">全部</option></select>
+        <label style="margin-left:16px">日期：</label>
+        <span class="drp-wrap">
+          <button class="date-btn" id="dsr-kpi-custom-btn">自定义</button>
+          <div class="drp-panel" id="dsr-kpi-drp">
+            <div class="drp-body">
+              <div class="drp-side">
+                <button class="drp-preset" data-d="today">今日</button>
+                <button class="drp-preset" data-d="yesterday">昨日</button>
+                <button class="drp-preset" data-d="7d">近7日</button>
+                <button class="drp-preset" data-d="30d">近30日</button>
+              </div>
+              <div class="drp-cals">
+                <div class="drp-mth" id="dsr-kpi-cal-left"></div>
+                <div class="drp-mth" id="dsr-kpi-cal-right"></div>
+              </div>
+            </div>
+            <div class="drp-foot"><span>已选：</span><span class="val" id="dsr-kpi-range-text"></span></div>
+          </div>
+        </span>
+      </div>
+      <div class="kpi-row" id="dsr-kpi-row" style="margin-bottom:16px">
+        <div class="kpi-card"><div class="value" id="dsr-kpi-1">⏳</div><div class="label">消费者服务体验分</div></div>
+        <div class="kpi-card"><div class="value" id="dsr-kpi-2">⏳</div><div class="label">服务态度体验分</div></div>
+        <div class="kpi-card"><div class="value" id="dsr-kpi-3">⏳</div><div class="label">基础服务体验分</div></div>
+        <div class="kpi-card"><div class="value" id="dsr-kpi-4">⏳</div><div class="label">商品服务体验分</div></div>
+        <div class="kpi-card"><div class="value" id="dsr-kpi-5">⏳</div><div class="label">发货服务体验分</div></div>
+        <div class="kpi-card"><div class="value" id="dsr-kpi-6">⏳</div><div class="label">物流服务体验分</div></div>
+      </div>
+      <div style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-size:13px;color:#666">日期：</span>
+          <button class="date-btn" data-range="7">近7天</button>
+          <button class="date-btn" data-range="15">近15天</button>
+          <button class="date-btn active" data-range="30">近30天</button>
+          <span class="drp-wrap">
+            <button class="date-btn" id="dsr-custom-btn">自定义</button>
+            <div class="drp-panel" id="dsr-drp">
+              <div class="drp-body">
+                <div class="drp-side">
+                  <button class="drp-preset" data-d="today">今日</button>
+                  <button class="drp-preset" data-d="yesterday">昨日</button>
+                  <button class="drp-preset sel" data-d="7d">近7日</button>
+                  <button class="drp-preset" data-d="30d">近30日</button>
+                  <button class="drp-preset" data-d="this_week">本周</button>
+                  <button class="drp-preset" data-d="this_month">本月</button>
+                </div>
+                <div class="drp-cals">
+                  <div class="drp-mth" id="dsr-cal-left"></div>
+                  <div class="drp-mth" id="dsr-cal-right"></div>
+                </div>
+              </div>
+              <div class="drp-foot"><span>已选：</span><span class="val" id="dsr-range-text"></span></div>
+            </div>
+          </span>
+          <span style="font-size:13px;color:#666;margin-left:8px">店铺：</span>
+          <div style="position:relative">
+            <input type="text" id="dsr-search" placeholder="搜索店铺..." style="width:220px;padding:6px 10px;font-size:13px" autocomplete="off">
+            <div id="dsr-dropdown" style="display:none;position:absolute;top:100%;left:0;width:220px;max-height:200px;overflow-y:auto;background:#fff;border:1px solid #d9d9d9;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:100;font-size:13px"></div>
+          </div>
+          <button id="btn-dsr-filter" style="padding:6px 16px;font-size:13px">🔍 筛选</button>
+        </div>
+        <div id="dsr-tags" style="display:flex;flex-wrap:wrap;gap:4px;min-height:0;margin-top:6px"></div>
+      </div>
+      <div style="overflow-x:auto"><table><thead><tr><th>店铺</th><th>日期</th><th>消费者服务</th><th>服务态度</th><th>基础服务</th><th>商品服务</th><th>发货服务</th><th>物流服务</th></tr></thead><tbody id="dsr-tbody"></tbody></table></div>
+      <div class="pagination" id="dsr-pagination" style="display:none">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span>每页</span>
+          <select id="dsr-page-size">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+          </select>
+          <span>条</span>
+          <span class="info" id="dsr-page-info"></span>
+        </div>
+        <div style="display:flex;gap:4px" id="dsr-page-btns"></div>
+      </div>
+      <div id="dsr-count" style="margin-top:10px;font-size:12px;color:#999"></div>
+    </div>
+
+    <div id="status-line">✅ 页面已渲染，开始加载数据...</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var el = function(id){ return document.getElementById(id); };
+
+  function log(msg, color){
+    var s = el('status-line');
+    if (s) { s.textContent = msg; if (color) s.style.color = color; }
+    console.log(msg);
+  }
+
+  log('JS 已执行，开始 fetch...', '#1890ff');
+
+  function get(url, cb){
+    log('请求: ' + url);
+    fetch(url).then(function(r){
+      if (!r.ok) throw new Error(url + ' → ' + r.status);
+      return r.json();
+    }).then(function(data){
+      cb(null, data);
+    }).catch(function(e){
+      log('❌ ' + e.message, '#fa541c');
+      cb(e);
+    });
+  }
+
+  function esc(s){
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function fillSelect(id, items, first) {
+    var sel = el(id); sel.innerHTML = '';
+    if (first) { var opt = document.createElement('option'); opt.value = ''; opt.textContent = first; sel.appendChild(opt); }
+    for (var i=0; i<items.length; i++){
+      var opt = document.createElement('option'); opt.value = items[i]; opt.textContent = items[i]; sel.appendChild(opt);
+    }
+  }
+
+  get('/api/summary', function(err, d){
+    if (err) return;
+    el('kpi-stores').textContent = d.total_stores || 0;
+    el('kpi-products').textContent = d.total_products || 0;
+    el('kpi-dates').textContent = d.total_dates || 0;
+    el('kpi-avg-rating').textContent = ((d.total_products || 0) > 0 ? '—' : '—');
+    log('✅ 摘要: ' + d.total_stores + '店 ' + d.total_products + '品', '#52c41a');
+  });
+
+  get('/api/dates', function(err, d){
+    if (err) return;
+    var dates = Array.isArray(d) ? d : (d.dates || []);
+    log('✅ 日期: ' + dates.length + '天', '#52c41a');
+    initPanelPickers();
+  });
+
+  get('/api/stores', function(err, d){
+    if (err) return;
+    var stores = d.stores || d || [];
+    var names = [];
+  // Also store brand mapping
+    window._allStoreBrands = {};
+    for (var i=0;i<stores.length;i++){
+      var s = stores[i];
+      var name = typeof s==='string' ? s : (s.name || s.store_name || '');
+      var brand = typeof s==='string' ? '' : (s.brand || '');
+      names.push(name);
+      window._allStoreBrands[name] = brand;
+    }
+    fillSelect('product-store', names, '全部');
+    window._allStoreNames = names;
+    log('✅ 店铺: ' + names.length + '家', '#52c41a');
+  });
+
+  get('/api/brands', function(err, d){
+    if (err) return;
+    var brands = d.brands || d || [];
+    var starBrand = el('star-brand'), filterBrand = el('brand-filter');
+    var h = '<option value="">全部</option>';
+    for (var i=0;i<brands.length;i++){
+      var bn = typeof brands[i] === 'string' ? brands[i] : (brands[i].name || brands[i].brand || '');
+      h += '<option value="'+esc(bn)+'">'+esc(bn)+'</option>';
+    }
+    if (starBrand) starBrand.innerHTML = h;
+    if (filterBrand) filterBrand.innerHTML = h;
+    var dsrBrand = el('dsr-brand-filter');
+    if (dsrBrand) dsrBrand.innerHTML = h;
+    var trendBrand = el('trend-brand');
+    if (trendBrand) trendBrand.innerHTML = h;
+    var trendProdBrand = el('trend-prod-brand');
+    if (trendProdBrand) trendProdBrand.innerHTML = h;
+    var homeBrand = el('home-brand');
+    if (homeBrand) homeBrand.innerHTML = h;
+    log('✅ 品牌: ' + brands.length + '个', '#52c41a');
+  });
+
+  var alertThreshold = 40, alertLatestDate = '';
+
+  function onThresholdChange(){
+    var inp = el('alert-threshold');
+    var v = parseInt(inp.value) || 40;
+    if (v < 1) v = 1; if (v > 99) v = 99;
+    inp.value = v;
+    alertThreshold = v;
+    loadAlerts();
+  }
+
+  function loadAlerts(){
+    get('/api/low-rating?threshold=' + alertThreshold, function(err, d){
+    if (err) return;
+    var list = d.stores || d.products || d.data || [];
+    if (!Array.isArray(list)) list = [];
+    el('kpi-low').textContent = list.length;
+    if (list.length > 0){
+      var bar = el('alert-bar');
+      // DSR 面板激活时不显示预警
+      var dsrPanel = el('dsr-panel');
+      if (dsrPanel && dsrPanel.style.display !== 'none') { bar.style.display = 'none'; }
+      else bar.style.display = '';
+      var latestDate = list[0].date || '';
+      for (var i=1;i<list.length;i++){ if (list[i].date > latestDate) latestDate = list[i].date; }
+      el('alert-date').textContent = '（' + latestDate + '）';
+      var cards = '';
+      for (var i=0;i<list.length;i++){
+        var p = list[i];
+        if (p.date !== latestDate) continue;
+        var rc = p.rating < 20 ? '#cf1322' : (p.rating < 30 ? '#d4380d' : '#d46b08');
+        cards += '<div class="alert-card-item" data-store="'+esc(p.store||p.store_name||'')+'" onclick="openAlertPopup(\''+esc(p.store||p.store_name||'').replace(/'/g,"\\'")+'\')" style="background:#fff;border:1px solid #ffd8bf;border-radius:6px;padding:8px 14px;text-align:center;min-width:140px;cursor:pointer">' +
+          '<div style="font-size:13px;color:#333;margin-bottom:4px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(p.store||p.store_name||'')+'">'+esc(p.store||p.store_name||'')+'</div>' +
+          '<div style="font-size:22px;font-weight:700;color:'+rc+'">'+(p.rating||p.score||0).toFixed(1)+'%</div></div>';
+      }
+      el('alert-cards').innerHTML = cards;
+    }
+    log('✅ 预警: ' + list.length + '条', list.length>0?'#fa541c':'#52c41a');
+    var pt = document.querySelector('#alert-panel h3');
+    if (pt) pt.textContent = '⚠️ 低评分预警（<'+alertThreshold+'%）';
+  });
+  }
+
+  loadAlerts();
+  el('alert-threshold').addEventListener('change', onThresholdChange);
+
+  var storeData = [], storePage = 1, storePageSize = 20;
+  var starData = [], starPage = 1, starPageSize = 20;
+  var dsrData = [], dsrPage = 1, dsrPageSize = 20, dsrCols = [];
+
+  function renderStorePage(){
+    var filtered = storeData;
+    if (storeSelected.length > 0) filtered = storeData.filter(function(s){ return storeSelected.indexOf(s.store) >= 0; });
+    var total = filtered.length, pages = Math.ceil(total/storePageSize);
+    if (storePage > pages) storePage = pages || 1;
+    var start = (storePage-1)*storePageSize, end = Math.min(start+storePageSize, total);
+    var h = '', totalAvg = 0, cnt = 0;
+    for (var i=start;i<end;i++){
+      var s = filtered[i], r = s.rating; totalAvg += r; cnt++;
+      var cls = r>=80?'ok':(r>=60?'warning':'danger'), txt = r>=80?'良好':(r>=60?'一般':'预警');
+      h += '<tr><td>'+esc(s.store)+'</td><td>'+esc(s.brand)+'</td><td>'+esc(s.date)+'</td><td>'+r.toFixed(1)+'%</td><td><span class="status '+cls+'">'+txt+'</span></td></tr>';
+    }
+    el('store-tbody').innerHTML = h;
+    el('kpi-avg-rating').textContent = total>0 ? (totalAvg/cnt).toFixed(1)+'%' : '—';
+    el('store-page-info').textContent = total+' 条，第 '+storePage+'/'+pages+' 页';
+
+    var btns = '', btnDefs = [];
+    function go(p){ return function(){ storePage=p; renderStorePage(); }; }
+    btnDefs.push(['«', 1, storePage<=1]);
+    btnDefs.push(['‹', storePage-1, storePage<=1]);
+    for (var i=Math.max(1,storePage-2); i<=Math.min(pages,storePage+2); i++){
+      btnDefs.push([''+i, i, false]);
+    }
+    btnDefs.push(['›', storePage+1, storePage>=pages]);
+    btnDefs.push(['»', pages, storePage>=pages]);
+
+    var btnContainer = el('store-page-btns');
+    btnContainer.innerHTML = '';
+    for (var b=0; b<btnDefs.length; b++){
+      var def = btnDefs[b], btn = document.createElement('button');
+      btn.textContent = def[0];
+      if (def[2]) btn.disabled = true;
+      if (def[1] === storePage) btn.className = 'active';
+      btn.addEventListener('click', go(def[1]));
+      btnContainer.appendChild(btn);
+    }
+    el('store-pagination').style.display = total>storePageSize ? '' : 'none';
+  }
+
+  function renderStarPage(){
+    var total = starData.length, pages = Math.ceil(total/starPageSize);
+    if (starPage > pages) starPage = pages || 1;
+    var start = (starPage-1)*starPageSize, end = Math.min(start+starPageSize, total);
+    var h = '';
+    for (var i=start;i<end;i++){
+      var s = starData[i], items = s.items || [];
+      if (items.length === 0) items = [{dimension:'', indicator:'', performance:'', standard:''}];
+      for (var j=0;j<items.length;j++){
+        var it = items[j];
+        h += '<tr>';
+        if (j === 0){
+          h += '<td rowspan="'+items.length+'">'+esc(s.store)+'</td>';
+          h += '<td rowspan="'+items.length+'">'+esc(s.brand)+'</td>';
+          h += '<td rowspan="'+items.length+'">'+esc(s.date)+'</td>';
+          h += '<td rowspan="'+items.length+'">'+s.star.toFixed(1)+'</td>';
+        }
+        h += '<td>'+esc(it.dimension||'')+'</td>';
+        h += '<td>'+esc(it.indicator||'')+'</td>';
+        var perf = it.performance||'';
+        var pf = parseFloat(perf);
+        var perfDisplay = (!isNaN(pf) && pf < 10) ? (pf*100).toFixed(2)+'%' : esc(perf);
+        h += '<td>'+perfDisplay+'</td>';
+        h += '<td>'+esc(it.standard||'')+'</td>';
+        h += '</tr>';
+      }
+    }
+    el('star-tbody').innerHTML = h;
+    el('star-count').textContent = '共 '+total+' 条';
+    el('star-page-info').textContent = total+' 条，第 '+starPage+'/'+pages+' 页';
+
+    var btns = '';
+    function goStar(p){ return function(){ starPage=p; renderStarPage(); }; }
+    var btnDefs = [];
+    btnDefs.push(['«', 1, starPage<=1]);
+    btnDefs.push(['‹', starPage-1, starPage<=1]);
+    for (var i=Math.max(1,starPage-2); i<=Math.min(pages,starPage+2); i++){
+      btnDefs.push([''+i, i, false]);
+    }
+    btnDefs.push(['›', starPage+1, starPage>=pages]);
+    btnDefs.push(['»', pages, starPage>=pages]);
+
+    var btnContainer = el('star-page-btns');
+    btnContainer.innerHTML = '';
+    for (var b=0; b<btnDefs.length; b++){
+      var def = btnDefs[b], btn = document.createElement('button');
+      btn.textContent = def[0];
+      if (def[2]) btn.disabled = true;
+      if (def[1] === starPage) btn.className = 'active';
+      btn.addEventListener('click', goStar(def[1]));
+      btnContainer.appendChild(btn);
+    }
+    el('star-pagination').style.display = total>starPageSize ? '' : 'none';
+  }
+
+  function renderDsrPage(){
+    var total = dsrData.length, pages = Math.ceil(total/dsrPageSize);
+    if (dsrPage > pages) dsrPage = pages || 1;
+    var start = (dsrPage-1)*dsrPageSize, end = Math.min(start+dsrPageSize, total);
+    var h = '', cols = dsrCols;
+    for (var i=start;i<end;i++){
+      var s = dsrData[i];
+      h += '<tr><td>'+esc(s[cols[0]]||'')+'</td><td>'+esc(s[cols[1]]||'')+'</td>';
+      for (var c=2;c<cols.length;c++){ var v=s[cols[c]]; h+='<td>'+(v!=null?(typeof v==='number'?v.toFixed(1):esc(String(v))):'-')+'</td>'; }
+      h += '</tr>';
+    }
+    el('dsr-tbody').innerHTML = h;
+    el('dsr-count').textContent = '共 '+total+' 条';
+    el('dsr-page-info').textContent = total+' 条，第 '+dsrPage+'/'+pages+' 页';
+
+    function goDsr(p){ return function(){ dsrPage=p; renderDsrPage(); }; }
+    var btnDefs = [];
+    btnDefs.push(['«', 1, dsrPage<=1]);
+    btnDefs.push(['‹', dsrPage-1, dsrPage<=1]);
+    for (var i=Math.max(1,dsrPage-2); i<=Math.min(pages,dsrPage+2); i++){
+      btnDefs.push([''+i, i, false]);
+    }
+    btnDefs.push(['›', dsrPage+1, dsrPage>=pages]);
+    btnDefs.push(['»', pages, dsrPage>=pages]);
+
+    var btnContainer = el('dsr-page-btns');
+    btnContainer.innerHTML = '';
+    for (var b=0; b<btnDefs.length; b++){
+      var def = btnDefs[b], btn = document.createElement('button');
+      btn.textContent = def[0];
+      if (def[2]) btn.disabled = true;
+      if (def[1] === dsrPage) btn.className = 'active';
+      btn.addEventListener('click', goDsr(def[1]));
+      btnContainer.appendChild(btn);
+    }
+    el('dsr-pagination').style.display = total>dsrPageSize ? '' : 'none';
+  }
+
+  function loadStoreRatings(){
+    var df = storeDF, dt = storeDT, brand = el('brand-filter').value;
+    if (!df){ log('⏳ 等待日期加载...'); return; }
+    var url = '/api/store-ratings?date_from='+encodeURIComponent(df)+'&date_to='+encodeURIComponent(dt);
+    if (brand) url += '&brand='+encodeURIComponent(brand);
+    get(url, function(err, d){
+      if (err) return;
+      var list = d.ratings || d.stores || d.data || d || [];
+      storeData = list.map(function(s){
+        return {store:s.store||s.store_name||s.name||'', brand:s.brand||'', rating:s.rating||s.score||s.avg_rating||0, date:s.date||''};
+      });
+      storeData.sort(function(a,b){ return b.date.localeCompare(a.date) || b.rating - a.rating; });
+      storePage = 1;
+      renderStorePage();
+      renderStoreChart();
+      log('✅ 店铺评分: ' + storeData.length + '条', '#52c41a');
+    });
+  }
+
+  function loadProducts(){
+    var store = el('product-store').value, search = (el('product-search').value || '').trim().toLowerCase();
+    var df = storeDF, dt = storeDT;
+    if (!df){ log('⏳ 等待日期...'); return; }
+    var url = '/api/products?date_from='+encodeURIComponent(df)+'&date_to='+encodeURIComponent(dt);
+    if (store) url += '&store='+encodeURIComponent(store);
+    get(url, function(err, d){
+      if (err) return;
+      var list = d.products || d.data || d || [];
+      if (search) list = list.filter(function(p){ var t=(p.title||p.product_title||'').toLowerCase(); var id=String(p.id||p.product_id||''); return t.indexOf(search)>=0||id.indexOf(search)>=0; });
+      var limit = Math.min(list.length, 200), h = '';
+      for (var i=0;i<limit;i++){
+        var p = list[i];
+        h += '<tr><td>'+esc(p.id||p.product_id||'')+'</td><td>'+esc(p.title||p.product_title||'')+'</td><td>'+esc(p.store||p.store_name||'')+'</td><td>'+(p.rating||p.score||0).toFixed(1)+'%</td><td>'+(p.reviews||p.review_count||0)+'</td><td>'+esc(p.date||'')+'</td></tr>';
+      }
+      el('product-tbody').innerHTML = h;
+      el('product-count').textContent = '显示 '+limit+' / '+list.length+' 条';
+      log('✅ 商品: '+limit+'/'+list.length+'条', '#52c41a');
+    });
+  }
+
+  function renderStoreChart(){
+    // 按店铺分组
+    var byStore = {};
+    var allDates = {};
+    for (var i = 0; i < storeData.length; i++){
+      var s = storeData[i];
+      if (storeSelected.length > 0 && storeSelected.indexOf(s.store) < 0) continue;
+      if (!byStore[s.store]) byStore[s.store] = {};
+      byStore[s.store][s.date] = s.rating;
+      allDates[s.date] = true;
+    }
+    var stores = Object.keys(byStore).sort();
+    var dates = Object.keys(allDates).sort();
+    if (dates.length === 0 || stores.length === 0){
+      document.getElementById('store-chart-container').innerHTML = '<canvas id="sc" style="width:100%;height:300px"></canvas>';
+      return;
+    }
+    // 限制最多 15 条线
+    var maxLines = 15;
+    if (stores.length > maxLines) stores = stores.slice(0, maxLines);
+    var colors = ['#1890ff','#fa541c','#52c41a','#722ed1','#faad14','#13c2c2','#eb2f96','#2f54eb','#a0d911','#f5222d','#1890ff','#fa541c','#52c41a','#722ed1','#faad14'];
+    var datasets = [];
+    for (var si = 0; si < stores.length; si++){
+      var sn = stores[si];
+      var vals = [];
+      for (var di = 0; di < dates.length; di++){
+        vals.push(byStore[sn][dates[di]] || null);
+      }
+      datasets.push({label: sn, data: vals, borderColor: colors[si % colors.length], backgroundColor: colors[si % colors.length] + '20', tension: 0.3, pointRadius: 2, spanGaps: false});
+    }
+    document.getElementById('store-chart-container').innerHTML = '<canvas id="sc" style="width:100%;height:300px"></canvas>';
+    var ctx = document.getElementById('sc').getContext('2d');
+    if (storeChart) storeChart.destroy();
+    storeChart = new Chart(ctx, {
+      type: 'line',
+      data: {labels: dates, datasets: datasets},
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: {mode: 'nearest', intersect: false},
+        plugins: {legend: {position: 'bottom', labels: {boxWidth: 12, padding: 10, font: {size: 10}}}},
+        scales: {y: {min: 0, max: 105, ticks: {callback: function(v){return v+'%';}, stepSize: 20}}}
+      }
+    });
+  }
+
+  el('btn-filter').addEventListener('click', function(){ storeSelected = []; renderStoreTags(); loadStoreRatings(); });
+  el('store-page-size').addEventListener('change', function(){ storePageSize=+this.value; storePage=1; renderStorePage(); });
+  el('star-page-size').addEventListener('change', function(){ starPageSize=+this.value; starPage=1; renderStarPage(); });
+  el('dsr-page-size').addEventListener('change', function(){ dsrPageSize=+this.value; dsrPage=1; renderDsrPage(); });
+  el('btn-search').addEventListener('click', function(){ loadProducts(); });
+  el('product-search').addEventListener('input', function(){ loadProducts(); });
+  el('product-store').addEventListener('change', function(){ loadProducts(); });
+
+  var trendSelected = [], trendDropdown = el('trend-dropdown');
+  var storeSelected = [], storeDropdown = el('store-dropdown');
+
+  function fuzzyMatch(text, query){
+    if (!query) return true;
+    var t=text.toLowerCase(), q=query.toLowerCase(), qi=0;
+    for (var i=0;i<t.length&&qi<q.length;i++){ if(t[i]===q[qi])qi++; }
+    return qi===q.length;
+  }
+
+  function renderTrendTags(){
+    var div = el('trend-tags'), h = '';
+    for (var i=0;i<trendSelected.length;i++){
+      h += '<span style="display:inline-flex;align-items:center;gap:2px;background:#e6f7ff;border:1px solid #91d5ff;border-radius:3px;padding:1px 6px;font-size:12px;cursor:default">'+esc(trendSelected[i])+'<span style="cursor:pointer;color:#999;margin-left:2px" data-idx="'+i+'">×</span></span>';
+    }
+    div.innerHTML = h;
+    var removes = div.querySelectorAll('span[data-idx]');
+    for (var r=0;r<removes.length;r++) removes[r].addEventListener('click', function(e){ e.stopPropagation(); trendSelected.splice(parseInt(this.getAttribute('data-idx')),1); renderTrendTags(); el('trend-hint').textContent=trendSelected.length+'家已选'; });
+    el('trend-hint').textContent = trendSelected.length>0?trendSelected.length+'家已选':'';
+  }
+
+  function getTrendFilteredStores(){
+    var brand = el('trend-brand') ? el('trend-brand').value : '';
+    var names = window._allStoreNames || [];
+    if (!brand) return names;
+    var brands = window._allStoreBrands || {};
+    var result = [];
+    for (var i=0;i<names.length;i++){
+      if (brands[names[i]] === brand) result.push(names[i]);
+    }
+    return result;
+  }
+
+  el('trend-search').addEventListener('input', function(){
+    var q = this.value;
+    var stores = getTrendFilteredStores();
+    if (!stores.length) return;
+    var matches = [];
+    for (var i=0;i<stores.length;i++){
+      if (trendSelected.indexOf(stores[i])>=0) continue;
+      if (!q || fuzzyMatch(stores[i], q)){ matches.push(stores[i]); if(matches.length>=15)break; }
+    }
+    if (matches.length > 0){
+      var h = '';
+      for (var m=0;m<matches.length;m++) h += '<div style="padding:6px 12px;cursor:pointer;border-bottom:1px solid #f5f5f5" data-name="'+esc(matches[m])+'">'+esc(matches[m])+'</div>';
+      trendDropdown.innerHTML = h; trendDropdown.style.display = '';
+      var items = trendDropdown.querySelectorAll('div[data-name]');
+      for (var d=0;d<items.length;d++) items[d].addEventListener('mousedown', function(e){ e.preventDefault(); var n=this.getAttribute('data-name'); if(trendSelected.indexOf(n)<0){trendSelected.push(n);renderTrendTags();} el('trend-search').value=''; trendDropdown.style.display='none'; });
+    } else trendDropdown.style.display = 'none';
+  });
+  // 聚焦时显示全部（排除已选）
+  el('trend-search').addEventListener('focus', function(){
+    if (this.value) return;
+    var stores = getTrendFilteredStores();
+    if (!stores.length) return;
+    var matches = [];
+    for (var i=0;i<stores.length;i++){
+      if (trendSelected.indexOf(stores[i])>=0) continue;
+      matches.push(stores[i]); if(matches.length>=15)break;
+    }
+    if (matches.length > 0){
+      var h = '';
+      for (var m=0;m<matches.length;m++) h += '<div style="padding:6px 12px;cursor:pointer;border-bottom:1px solid #f5f5f5" data-name="'+esc(matches[m])+'">'+esc(matches[m])+'</div>';
+      trendDropdown.innerHTML = h; trendDropdown.style.display = '';
+      var items = trendDropdown.querySelectorAll('div[data-name]');
+      for (var d=0;d<items.length;d++) items[d].addEventListener('mousedown', function(e){ e.preventDefault(); var n=this.getAttribute('data-name'); if(trendSelected.indexOf(n)<0){trendSelected.push(n);renderTrendTags();} el('trend-search').value=''; trendDropdown.style.display='none'; });
+    }
+  });
+  document.addEventListener('click', function(e){ if(e.target!==el('trend-search'))trendDropdown.style.display='none'; });
+  el('trend-search').addEventListener('keydown', function(e){ if(e.key==='Enter')trendDropdown.style.display='none'; });
+
+  // ── 店铺评分搜索下拉 ──
+  function renderStoreTags(){
+    var div = el('store-tags'), h = '';
+    for (var i=0;i<storeSelected.length;i++){
+      h += '<span style="display:inline-flex;align-items:center;gap:2px;background:#e6f7ff;border:1px solid #91d5ff;border-radius:3px;padding:1px 6px;font-size:12px;cursor:default">'+esc(storeSelected[i])+'<span style="cursor:pointer;color:#999;margin-left:2px" data-idx="'+i+'">×</span></span>';
+    }
+    div.innerHTML = h;
+    var removes = div.querySelectorAll('span[data-idx]');
+    for (var r=0;r<removes.length;r++) removes[r].addEventListener('click', function(e){ e.stopPropagation(); var idx=parseInt(this.getAttribute('data-idx')); storeSelected.splice(idx,1); renderStoreTags(); renderStoreAfterFilter(); });
+    el('store-hint').textContent = storeSelected.length>0?storeSelected.length+'家已选':'';
+  }
+
+  function getStoreFilteredNames(){
+    var brand = el('brand-filter').value;
+    var names = window._allStoreNames || [];
+    if (!brand) return names;
+    var brands = window._allStoreBrands || {};
+    var result = [];
+    for (var i=0;i<names.length;i++){
+      if (brands[names[i]] === brand) result.push(names[i]);
+    }
+    return result;
+  }
+
+  el('store-search').addEventListener('input', function(){
+    var q = this.value;
+    var stores = getStoreFilteredNames();
+    if (!stores.length) return;
+    var matches = [];
+    for (var i=0;i<stores.length;i++){
+      if (storeSelected.indexOf(stores[i])>=0) continue;
+      if (!q || fuzzyMatch(stores[i], q)){ matches.push(stores[i]); if(matches.length>=15)break; }
+    }
+    if (matches.length > 0){
+      var h = '';
+      for (var m=0;m<matches.length;m++) h += '<div style="padding:6px 12px;cursor:pointer;border-bottom:1px solid #f5f5f5" data-name="'+esc(matches[m])+'">'+esc(matches[m])+'</div>';
+      storeDropdown.innerHTML = h; storeDropdown.style.display = '';
+      var items = storeDropdown.querySelectorAll('div[data-name]');
+      for (var d=0;d<items.length;d++) items[d].addEventListener('mousedown', function(e){ e.preventDefault(); var n=this.getAttribute('data-name'); if(storeSelected.indexOf(n)<0){storeSelected.push(n);renderStoreTags();renderStoreAfterFilter();} el('store-search').value=''; storeDropdown.style.display='none'; });
+    } else storeDropdown.style.display = 'none';
+  });
+  el('store-search').addEventListener('focus', function(){
+    if (this.value) return;
+    var stores = getStoreFilteredNames();
+    if (!stores.length) return;
+    var matches = [];
+    for (var i=0;i<stores.length;i++){
+      if (storeSelected.indexOf(stores[i])>=0) continue;
+      matches.push(stores[i]); if(matches.length>=15)break;
+    }
+    if (matches.length > 0){
+      var h = '';
+      for (var m=0;m<matches.length;m++) h += '<div style="padding:6px 12px;cursor:pointer;border-bottom:1px solid #f5f5f5" data-name="'+esc(matches[m])+'">'+esc(matches[m])+'</div>';
+      storeDropdown.innerHTML = h; storeDropdown.style.display = '';
+      var items = storeDropdown.querySelectorAll('div[data-name]');
+      for (var d=0;d<items.length;d++) items[d].addEventListener('mousedown', function(e){ e.preventDefault(); var n=this.getAttribute('data-name'); if(storeSelected.indexOf(n)<0){storeSelected.push(n);renderStoreTags();renderStoreAfterFilter();} el('store-search').value=''; storeDropdown.style.display='none'; });
+    }
+  });
+  document.addEventListener('click', function(e){ if(e.target!==el('store-search'))storeDropdown.style.display='none'; });
+  el('store-search').addEventListener('keydown', function(e){ if(e.key==='Enter')storeDropdown.style.display='none'; });
+
+  function renderStoreAfterFilter(){
+    storePage = 1;
+    renderStorePage();
+    renderStoreChart();
+  }
+
+  el('trend-brand').addEventListener('change', function(){
+    var brand = this.value;
+    trendSelected = [];
+    if (brand){
+      var stores = getTrendFilteredStores();
+      trendSelected = stores.slice(0, 10);
+    }
+    renderTrendTags();
+    el('trend-search').value = '';
+    trendDropdown.style.display = 'none';
+    // 触发加载（复用按钮的 Chart.js 加载逻辑）
+    el('btn-trend').click();
+  });
+
+  var starSelected = [], starDropdown = el('star-dropdown');
+
+  function renderStarTags(){
+    var div = el('star-tags'), h = '';
+    for (var i=0;i<starSelected.length;i++) h += '<span style="display:inline-flex;align-items:center;gap:2px;background:#fff7e6;border:1px solid #ffd591;border-radius:3px;padding:1px 6px;font-size:12px;cursor:default">'+esc(starSelected[i])+'<span style="cursor:pointer;color:#999;margin-left:2px" data-idx="'+i+'">×</span></span>';
+    div.innerHTML = h;
+    var removes = div.querySelectorAll('span[data-idx]');
+    for (var r=0;r<removes.length;r++) removes[r].addEventListener('click', function(e){ e.stopPropagation(); starSelected.splice(parseInt(this.getAttribute('data-idx')),1); renderStarTags(); loadStarData(); });
+  }
+
+  function loadStarData(){
+    var df=starDF, dt=starDT, brand=el('star-brand').value;
+    var url='/api/star-data', params=[];
+    if(df)params.push('date_from='+encodeURIComponent(df));
+    if(dt)params.push('date_to='+encodeURIComponent(dt));
+    if(brand)params.push('brand='+encodeURIComponent(brand));
+    if(starSelected.length===1)params.push('store='+encodeURIComponent(starSelected[0]));
+    if(params.length)url+='?'+params.join('&');
+    get(url,function(err,d){
+      if(err)return;
+      var list=d.star_data||d.data||[];
+      if(!Array.isArray(list))list=[];
+      if(starSelected.length>1)list=list.filter(function(s){return starSelected.indexOf(s.store)>=0;});
+      starData = list.map(function(s){ return {store:s.store||'', brand:s.brand||'', date:s.date||'', star:s.star||0, items:s.items||[]}; });
+      starData.sort(function(a,b){ return b.date.localeCompare(a.date) || b.star - a.star; });
+      starPage = 1;
+      renderStarPage();
+    });
+    loadStarAverages();
+  }
+
+  function loadStarAverages(){
+    var df=starDF, dt=starDT, brand=el('star-brand').value;
+    var url='/api/star/averages', params=[];
+    if(df)params.push('date_from='+encodeURIComponent(df));
+    if(dt)params.push('date_to='+encodeURIComponent(dt));
+    if(brand)params.push('brand='+encodeURIComponent(brand));
+    if(starSelected.length>0)params.push('store='+encodeURIComponent(starSelected.join(',')));
+    if(params.length)url+='?'+params.join('&');
+    get(url,function(err,d){
+      if(err)return;
+      var avgs=d.averages||{};
+      var metrics=d.metrics||[];
+      for(var i=0;i<5;i++){
+        var kpiEl=document.getElementById('star-kpi-'+(i+1));
+        if(!kpiEl)continue;
+        var key=metrics[i];
+        var val=avgs[key];
+        if(val!=null){
+          if(key.indexOf('排名')>=0||key.indexOf('率')>=0) kpiEl.textContent=(val*100).toFixed(1)+'%';
+          else if(key.indexOf('活跃度')>=0) kpiEl.textContent=(val*100).toFixed(1)+'%';
+          else kpiEl.textContent=val.toFixed(2);
+        } else {
+          kpiEl.textContent='-';
+        }
+      }
+    });
+  }
+
+  // 品牌切换即时联动
+  el('star-brand').addEventListener('change',function(){ loadStarData(); });
+
+  // 店铺搜索模糊匹配
+  el('star-search').addEventListener('input',function(){
+    var q=this.value;
+    if(!window._allStoreNames)return;
+    var matches=[];
+    for(var i=0;i<window._allStoreNames.length;i++){if(fuzzyMatch(window._allStoreNames[i],q)&&starSelected.indexOf(window._allStoreNames[i])<0){matches.push(window._allStoreNames[i]);if(matches.length>=15)break;}}
+    if(matches.length>0&&q){var h='';for(var m=0;m<matches.length;m++)h+='<div style="padding:6px 12px;cursor:pointer;border-bottom:1px solid #f5f5f5" data-name="'+esc(matches[m])+'">'+esc(matches[m])+'</div>';starDropdown.innerHTML=h;starDropdown.style.display='';
+    var items=starDropdown.querySelectorAll('div[data-name]');for(var d=0;d<items.length;d++)items[d].addEventListener('mousedown',function(e){e.preventDefault();var n=this.getAttribute('data-name');if(starSelected.indexOf(n)<0){starSelected.push(n);renderStarTags();loadStarData();}el('star-search').value='';starDropdown.style.display='none';});}else starDropdown.style.display='none';
+  });
+  document.addEventListener('click',function(e){if(e.target!==el('star-search'))starDropdown.style.display='none';});
+
+  var dsrSelected=[],dsrDropdown=el('dsr-dropdown');
+
+  function renderDsrTags(){
+    var div=el('dsr-tags'),h='';
+    for(var i=0;i<dsrSelected.length;i++)h+='<span style="display:inline-flex;align-items:center;gap:2px;background:#f0f5ff;border:1px solid #adc6ff;border-radius:3px;padding:1px 6px;font-size:12px;cursor:default">'+esc(dsrSelected[i])+'<span style="cursor:pointer;color:#999;margin-left:2px" data-idx="'+i+'">×</span></span>';
+    div.innerHTML=h;
+    var removes=div.querySelectorAll('span[data-idx]');
+    for(var r=0;r<removes.length;r++)removes[r].addEventListener('click',function(e){e.stopPropagation();dsrSelected.splice(parseInt(this.getAttribute('data-idx')),1);renderDsrTags();loadDsrData();});
+  }
+
+  function loadDsrAverages(){
+    var url = '/api/dsr/averages', params = [];
+    var brand = el('dsr-brand-filter').value;
+    var date = dsrKpiDT;
+    if (brand) params.push('brand='+encodeURIComponent(brand));
+    if (date) params.push('date='+encodeURIComponent(date));
+    if (params.length) url += '?' + params.join('&');
+    get(url, function(err, d){
+      if (err) return;
+      var data = d.data || [];
+      var latest = data.length > 0 ? data[data.length - 1] : null;
+      var metrics = d.metrics || [];
+      for (var i = 0; i < 6; i++){
+        var kpiId = 'dsr-kpi-' + (i + 1);
+        var kpiEl = document.getElementById(kpiId);
+        if (latest && i < metrics.length){
+          var val = latest[metrics[i]];
+          if (kpiEl) kpiEl.textContent = val != null ? val.toFixed(2) : '-';
+        } else {
+          if (kpiEl) kpiEl.textContent = '-';
+        }
+      }
+    });
+  }
+
+  function loadDsrData(){
+    var url='/api/dsr',params=[];
+    var df=dsrDF,dt=dsrDT;
+    if(df)params.push('date_from='+encodeURIComponent(df));
+    if(dt)params.push('date_to='+encodeURIComponent(dt));
+    if(dsrSelected.length===1)params.push('store='+encodeURIComponent(dsrSelected[0]));
+    if(params.length)url+='?'+params.join('&');
+    get(url,function(err,d){
+      if(err)return;
+      var list=d.dsr_data||d.data||[];
+      if(!Array.isArray(list))list=[];
+      if(dsrSelected.length>1)list=list.filter(function(s){return dsrSelected.indexOf(s['店铺名称']||s.store||'')>=0;});
+      var cols=[];
+      if(list.length>0){for(var k in list[0]){if(list[0].hasOwnProperty(k))cols.push(k);}}
+      var thead=document.querySelector('#dsr-panel table thead tr');
+      var th='<th>店铺</th><th>日期</th>';
+      for(var c=2;c<cols.length;c++)th+='<th>'+esc(cols[c])+'</th>';
+      thead.innerHTML=th;
+      dsrCols = cols;
+      dsrData = list;
+      dsrData.sort(function(a,b){ return (b[cols[1]]||'') < (a[cols[1]]||'') ? -1 : (b[cols[1]]||'') > (a[cols[1]]||'') ? 1 : 0; });
+      dsrPage = 1;
+      renderDsrPage();
+    });
+  }
+
+  el('dsr-search').addEventListener('input',function(){
+    var q=this.value;
+    if(!window._allStoreNames)return;
+    var matches=[];
+    for(var i=0;i<window._allStoreNames.length;i++){if(fuzzyMatch(window._allStoreNames[i],q)&&dsrSelected.indexOf(window._allStoreNames[i])<0){matches.push(window._allStoreNames[i]);if(matches.length>=15)break;}}
+    if(matches.length>0&&q){var h='';for(var m=0;m<matches.length;m++)h+='<div style="padding:6px 12px;cursor:pointer;border-bottom:1px solid #f5f5f5" data-name="'+esc(matches[m])+'">'+esc(matches[m])+'</div>';dsrDropdown.innerHTML=h;dsrDropdown.style.display='';
+    var items=dsrDropdown.querySelectorAll('div[data-name]');for(var d=0;d<items.length;d++)items[d].addEventListener('mousedown',function(e){e.preventDefault();var n=this.getAttribute('data-name');if(dsrSelected.indexOf(n)<0){dsrSelected.push(n);renderDsrTags();loadDsrData();}el('dsr-search').value='';dsrDropdown.style.display='none';});}else dsrDropdown.style.display='none';
+  });
+  document.addEventListener('click',function(e){if(e.target!==el('dsr-search'))dsrDropdown.style.display='none';});
+  el('dsr-brand-filter').addEventListener('change',function(){loadDsrAverages();});
+  var hb = el('home-brand');
+  if(hb) hb.addEventListener('change', function(){
+    loadRatingOverview(ratingDF, ratingDT);
+    loadProductOverview(productDF, productDT);
+  });
+
+  var navItems = document.querySelectorAll('.nav-item');
+  for (var ni=0; ni<navItems.length; ni++){
+    navItems[ni].addEventListener('click', function(){
+      var target = this.getAttribute('data-target');
+      var panels = document.querySelectorAll('.panel');
+      for (var p=0; p<panels.length; p++) panels[p].style.display = 'none';
+      var panel = document.getElementById(target);
+      if (panel) panel.style.display = '';
+      if (target === 'dsr-panel' || target === 'trend-panel' || target === 'star-panel'){
+        var as = el('alert-section'), ab = el('alert-bar'), kl = el('kpi-low-card');
+        var gk = el('global-kpi-row');
+        if (as) as.style.display = 'none';
+        if (ab) ab.style.display = 'none';
+        if (kl) kl.style.display = 'none';
+        if (gk) gk.style.display = 'none';
+      } else {
+        var as2 = el('alert-section'), ab2 = el('alert-bar'), kl2 = el('kpi-low-card');
+        var gk2 = el('global-kpi-row');
+        if (as2) as2.style.display = '';
+        if (kl2) kl2.style.display = '';
+        if (gk2) gk2.style.display = '';
+        if (ab2 && el('kpi-low').textContent !== '⏳' && el('kpi-low').textContent !== '0') ab2.style.display = '';
+      }
+      for (var j=0; j<navItems.length; j++) navItems[j].classList.remove('active');
+      this.classList.add('active');
+      if (target === 'trend-panel') loadTrend();
+      if (target === 'dsr-panel') loadDsrAverages();
+    });
+  }
+
+  var allPanels = document.querySelectorAll('.panel');
+  for (var ap=0; ap<allPanels.length; ap++){
+    var pid = allPanels[ap].id;
+    if (pid === 'home-panel') continue;
+    allPanels[ap].style.display = 'none';
+  }
+
+  var chartLoaded = false, trendChartRating = null, trendChartReviews = null;
+
+  el('btn-trend').addEventListener('click', function(){
+    if (!chartLoaded){
+      var script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+      script.onload = function(){
+        var script2 = document.createElement('script');
+        script2.src = 'https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js';
+        script2.onload = function(){ chartLoaded = true; loadTrend(); };
+        script2.onerror = function(){ chartLoaded = true; loadTrend(); };
+        document.head.appendChild(script2);
+      };
+      script.onerror = function(){ el('chart-box').textContent = '⚠️ Chart.js 加载失败，请检查网络'; };
+      document.head.appendChild(script);
+    } else loadTrend();
+  });
+
+  // ── 商品明细搜索/筛选 ──
+  var trendProdStoreDD = el('trend-prod-store-dd');
+
+  // 店铺搜索下拉（模糊匹配）
+  el('trend-prod-search-store').addEventListener('input', function(){
+    var q = this.value.trim();
+    var stores = window._allStoreNames || [];
+    if (!q || !stores.length){ trendProdStoreDD.style.display = 'none'; applyTrendProdFilter(); return; }
+    var matches = [];
+    for (var i = 0; i < stores.length; i++){
+      if (fuzzyMatch(stores[i], q)){ matches.push(stores[i]); if (matches.length >= 12) break; }
+    }
+    if (matches.length > 0){
+      var h = '';
+      for (var m = 0; m < matches.length; m++) h += '<div style="padding:6px 12px;cursor:pointer;border-bottom:1px solid #f5f5f5" data-name="'+esc(matches[m])+'">'+esc(matches[m])+'</div>';
+      trendProdStoreDD.innerHTML = h; trendProdStoreDD.style.display = '';
+      var items = trendProdStoreDD.querySelectorAll('div[data-name]');
+      for (var d = 0; d < items.length; d++) items[d].addEventListener('mousedown', function(e){
+        e.preventDefault();
+        el('trend-prod-search-store').value = this.getAttribute('data-name');
+        trendProdStoreDD.style.display = 'none';
+        applyTrendProdFilter();
+      });
+    } else { trendProdStoreDD.style.display = 'none'; }
+    applyTrendProdFilter();
+  });
+  el('trend-prod-search-store').addEventListener('focus', function(){
+    if (this.value.trim()) return;
+    var stores = window._allStoreNames || [];
+    if (!stores.length) return;
+    var matches = stores.slice(0, 15);
+    var h = '';
+    for (var m = 0; m < matches.length; m++) h += '<div style="padding:6px 12px;cursor:pointer;border-bottom:1px solid #f5f5f5" data-name="'+esc(matches[m])+'">'+esc(matches[m])+'</div>';
+    trendProdStoreDD.innerHTML = h; trendProdStoreDD.style.display = '';
+    var items = trendProdStoreDD.querySelectorAll('div[data-name]');
+    for (var d = 0; d < items.length; d++) items[d].addEventListener('mousedown', function(e){
+      e.preventDefault();
+      el('trend-prod-search-store').value = this.getAttribute('data-name');
+      trendProdStoreDD.style.display = 'none';
+      applyTrendProdFilter();
+    });
+  });
+  document.addEventListener('click', function(e){ if (e.target !== el('trend-prod-search-store')) trendProdStoreDD.style.display = 'none'; });
+  el('trend-prod-search-store').addEventListener('keydown', function(e){ if (e.key === 'Enter'){ trendProdStoreDD.style.display = 'none'; applyTrendProdFilter(); } });
+
+  // 其他筛选 → 自动触发
+  el('trend-prod-search-id').addEventListener('input', function(){ applyTrendProdFilter(); });
+  el('trend-prod-search-code').addEventListener('input', function(){ applyTrendProdFilter(); });
+  el('trend-prod-brand').addEventListener('change', function(){ applyTrendProdFilter(); });
+  el('trend-prod-date-from').addEventListener('change', function(){ applyTrendProdFilter(); });
+  el('trend-prod-date-to').addEventListener('change', function(){ applyTrendProdFilter(); });
+
+  function loadTrend(){
+    if (typeof Chart === 'undefined') return;
+    var selected = trendSelected.slice();
+    var isWeighted = (selected.length === 0);
+
+    function renderChart(canvasId, containerId, title, datasets, isPercent){
+      var dateSet = {};
+      var ds = [];
+      for (var i=0; i<datasets.length; i++){
+        var d = datasets[i];
+        for (var dd in d.data){ dateSet[dd] = true; }
+        ds.push({ label: d.label, data: d.data, borderColor: d.color, backgroundColor: d.bg||'transparent', fill: d.fill||false, tension: 0.3, pointRadius: 3 });
+      }
+      if (ds.length === 0){ el(containerId).innerHTML='<span style="color:#888">暂无数据</span>'; return; }
+      var dates = Object.keys(dateSet).sort();
+      for (var m=0; m<ds.length; m++){
+        var dd=ds[m].data, arr=[];
+        for(var n=0; n<dates.length; n++) arr.push(dd[dates[n]]!=null ? dd[dates[n]] : null);
+        ds[m].data = arr;
+      }
+      el(containerId).innerHTML = '<canvas id="'+canvasId+'" style="width:100%;height:300px"></canvas>';
+      var ctx = document.getElementById(canvasId).getContext('2d');
+      var plugins = typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : [];
+      var opts = { responsive:true, maintainAspectRatio:false, layout:{padding:{top:18}}, interaction:{mode:'index',intersect:false}, plugins:{ legend:{position:'bottom', labels:{boxWidth:12, padding:15, color:'#555'}} }, scales:{y:{min:0, ticks:{color:'#555'}}} };
+      if (isPercent){ opts.scales.y.max = 105; opts.scales.y.ticks.callback = function(v){return v+'%';}; opts.scales.y.ticks.stepSize = 20; }
+      if (typeof ChartDataLabels !== 'undefined'){
+        opts.plugins.datalabels = { anchor:'end', align:'top', offset:2,
+          formatter: function(v,ctx){
+            if (v == null) return '';
+            if (isPercent) return v.toFixed(1)+'%';
+            return v >= 10000 ? (v/10000).toFixed(1)+'w' : (v>=1000?(v/1000).toFixed(1)+'k':v.toFixed(0));
+          },
+          font:{size:10,weight:'bold'}, color:'#555' };
+      }
+      if (canvasId==='trendRatingChart' && trendChartRating) trendChartRating.destroy();
+      if (canvasId==='trendReviewChart' && trendChartReviews) trendChartReviews.destroy();
+      var c = new Chart(ctx, { type:'line', data:{labels:dates, datasets:ds}, options:opts, plugins:plugins });
+      if (canvasId==='trendRatingChart') trendChartRating = c;
+      if (canvasId==='trendReviewChart') trendChartReviews = c;
+    }
+
+    var colors = ['#2563eb','#16a34a','#ea580c','#7c3aed','#0891b2','#db2777','#ca8a04','#4f46e5','#ea580c','#65a30d'];
+
+    if (isWeighted){
+      var url = '/api/home/product-overview';
+      var params = [];
+      if (trendDF) params.push('date_from='+encodeURIComponent(trendDF));
+      if (trendDT) params.push('date_to='+encodeURIComponent(trendDT));
+      if (params.length) url += '?' + params.join('&');
+      get(url, function(err, d){
+        if (err) return;
+        var data = d.data || [];
+        if (data.length === 0){ el('chart-box-rating').innerHTML='暂无数据'; el('chart-box-reviews').innerHTML='暂无数据'; return; }
+        var ratingData = {}, reviewData = {};
+        for (var i=0; i<data.length; i++){
+          ratingData[data[i].date] = data[i].weighted_avg_rating;
+          reviewData[data[i].date] = data[i].weighted_avg_reviews;
+        }
+        renderChart('trendRatingChart', 'chart-box-rating', '商品评分',
+          [{label:'加权平均评分',data:ratingData,color:'#2563eb',bg:'rgba(37,99,235,.06)',fill:true}], true);
+        renderChart('trendReviewChart', 'chart-box-reviews', '评价总数',
+          [{label:'总评价数',data:reviewData,color:'#ea580c',bg:'rgba(234,88,12,.06)',fill:true}], false);
+        loadTrendProducts();
+        log('✅ 趋势：加权 · '+data.length+'天', '#52c41a');
+      });
+    } else {
+      var url = '/api/trends/store-products?store=' + encodeURIComponent(selected.join(','));
+      if (trendDF) url += '&date_from=' + encodeURIComponent(trendDF);
+      if (trendDT) url += '&date_to=' + encodeURIComponent(trendDT);
+      get(url, function(err, d){
+        if (err) return;
+        var ratings = d.ratings || {};
+        var reviews = d.reviews || {};
+        var ratingDS = [];
+        for (var j=0; j<selected.length; j++){
+          var sn = selected[j];
+          if (!ratings[sn]) continue;
+          var rd = {};
+          for (var k=0; k<ratings[sn].length; k++){ rd[ratings[sn][k].date] = ratings[sn][k].value; }
+          ratingDS.push({label:sn, data:rd, color:colors[j%colors.length], fill:false});
+        }
+        var reviewDS = [];
+        for (var jj=0; jj<selected.length; jj++){
+          var sn2 = selected[jj];
+          if (!reviews[sn2]) continue;
+          var vd = {};
+          for (var kk=0; kk<reviews[sn2].length; kk++){ vd[reviews[sn2][kk].date] = reviews[sn2][kk].value; }
+          reviewDS.push({label:sn2, data:vd, color:colors[jj%colors.length], fill:false});
+        }
+        renderChart('trendRatingChart', 'chart-box-rating', '商品评分', ratingDS, true);
+        renderChart('trendReviewChart', 'chart-box-reviews', '评价总数', reviewDS, false);
+        loadTrendProducts();
+        log('✅ 趋势：'+selected.length+'店 · 评分+评价数', '#52c41a');
+      });
+    }
+  }
+
+  var trendProdPage = 1, trendProdPageSize = 20, trendProdData = [], trendProdFiltered = [];
+
+  function loadTrendProducts(){
+    var selected = trendSelected.slice();
+    var brand = el('trend-brand') ? el('trend-brand').value : '';
+    var url = '/api/products';
+    var params = [];
+    if (selected.length > 0) params.push('store=' + encodeURIComponent(selected.join(',')));
+    if (brand) params.push('brand=' + encodeURIComponent(brand));
+    if (trendDF) params.push('date_from=' + encodeURIComponent(trendDF));
+    if (trendDT) params.push('date_to=' + encodeURIComponent(trendDT));
+    if (params.length) url += '?' + params.join('&');
+    get(url, function(err, d){
+      if (err) return;
+      var list = d.products || d.data || d || [];
+      trendProdData = list.sort(function(a,b){ return b.date.localeCompare(a.date) || b.rating - a.rating; });
+      applyTrendProdFilter();
+    });
+  }
+
+  function applyTrendProdFilter(){
+    var idQ = (el('trend-prod-search-id').value || '').trim().toLowerCase();
+    var storeQ = (el('trend-prod-search-store').value || '').trim().toLowerCase();
+    var codeQ = (el('trend-prod-search-code').value || '').trim().toLowerCase();
+    var brandQ = el('trend-prod-brand').value;
+    var dateF = el('trend-prod-date-from').value;
+    var dateT = el('trend-prod-date-to').value;
+    trendProdFiltered = trendProdData.filter(function(p){
+      if (idQ && p.id.toLowerCase().indexOf(idQ) < 0) return false;
+      if (storeQ && p.store.toLowerCase().indexOf(storeQ) < 0) return false;
+      if (codeQ && (p.product_code||'').toLowerCase().indexOf(codeQ) < 0) return false;
+      if (brandQ && p.brand !== brandQ) return false;
+      if (dateF && p.date < dateF) return false;
+      if (dateT && p.date > dateT) return false;
+      return true;
+    });
+    trendProdPage = 1;
+    el('trend-prod-filtered-hint').textContent = trendProdFiltered.length !== trendProdData.length ? '（筛选后 '+trendProdFiltered.length+' / '+trendProdData.length+' 条）' : '';
+    renderTrendProducts();
+  }
+
+  function renderTrendProducts(){
+    var total = trendProdFiltered.length;
+    var pages = Math.ceil(total / trendProdPageSize);
+    if (trendProdPage > pages) trendProdPage = pages || 1;
+    var start = (trendProdPage - 1) * trendProdPageSize;
+    var end = Math.min(start + trendProdPageSize, total);
+    var h = '';
+    for (var i = start; i < end; i++){
+      var p = trendProdFiltered[i];
+      h += '<tr><td>'+esc(p.id)+'</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(p.title)+'">'+esc(p.title)+'</td><td>'+(p.reviews||0)+'</td><td>'+(p.rating||0).toFixed(1)+'%</td><td>'+esc(p.store)+'</td><td>'+esc(p.brand)+'</td><td>'+esc(p.date)+'</td><td>'+esc(p.product_name||'')+'</td><td>'+esc(p.product_code||'')+'</td></tr>';
+    }
+    el('trend-product-tbody').innerHTML = h;
+    el('trend-product-count').textContent = total + ' 条，第 ' + trendProdPage + '/' + pages + ' 页';
+
+    var btnContainer = el('trend-product-pagination');
+    btnContainer.innerHTML = '';
+    if (pages <= 1) return;
+    function go(p){ return function(){ trendProdPage = p; renderTrendProducts(); }; }
+    var btns = [['«',1,trendProdPage<=1],['‹',trendProdPage-1,trendProdPage<=1]];
+    for (var j=Math.max(1,trendProdPage-2); j<=Math.min(pages,trendProdPage+2); j++) btns.push([''+j, j, false]);
+    btns.push(['›',trendProdPage+1,trendProdPage>=pages],['»',pages,trendProdPage>=pages]);
+    for (var b=0; b<btns.length; b++){
+      var btn = document.createElement('button');
+      btn.textContent = btns[b][0];
+      btn.style.cssText = 'padding:2px 8px;margin:0 2px;border:1px solid #d9d9d9;background:#fff;border-radius:3px;font-size:12px;cursor:pointer';
+      if (btns[b][2]){ btn.disabled = true; btn.style.opacity = '0.4'; }
+      if (btns[b][1] === trendProdPage) btn.style.background = '#1890ff;color:#fff;border-color:#1890ff';
+      btn.addEventListener('click', go(btns[b][1]));
+      btnContainer.appendChild(btn);
+    }
+  }
+
+  // ── 日期范围选择器 ──
+  function createDateRangePicker(prefix, btnId, drpId, calLeftId, calRightId, textId, filterBtns, onChange, singleDate){
+    var state = { start: null, end: null, pickingStart: true, viewMonth: new Date().getMonth(), viewYear: new Date().getFullYear() };
+    var fmtYMD = function(d){ return d.getFullYear()+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0'); };
+    var fmtAPI = function(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+    var today = new Date(); today.setHours(0,0,0,0);
+    var WDAYS = ['日','一','二','三','四','五','六'];
+
+    function parseYMD(str){ var p=str.split('/'); return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2])); }
+    function sameDay(a,b){ return a&&b&&a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate(); }
+    function inRange(d){ return state.start&&state.end&&d>state.start&&d<state.end; }
+
+    function renderMonth(el, year, month){
+      var d1 = new Date(year, month, 1);
+      var startDow = d1.getDay();
+      var daysInMonth = new Date(year, month+1, 0).getDate();
+      var prevDays = new Date(year, month, 0).getDate();
+      var total = Math.ceil((startDow+daysInMonth)/7)*7;
+      var h = '<div class="drp-mth-head">';
+      if (el.id === calLeftId){
+        h += '<button class="arr" data-nav="-1">◀</button>';
+        h += '<span class="drp-mth-tit">'+year+'年'+(month+1)+'月</span>';
+        h += '<span style="width:22px"></span>';
+      } else {
+        h += '<button class="arr" data-nav="1">▶</button>';
+        h += '<span class="drp-mth-tit">'+year+'年'+(month+1)+'月</span>';
+        h += '<span style="width:22px"></span>';
+      }
+      h += '</div><div class="drp-wdays">';
+      for (var w=0;w<7;w++) h += '<span>'+WDAYS[w]+'</span>';
+      h += '</div><div class="drp-days">';
+      for (var i=0;i<total;i++){
+        var dayNum, cls = 'drp-day', d;
+        if (i < startDow) { dayNum = prevDays-startDow+i+1; cls += ' off'; d = new Date(year,month-1,dayNum); }
+        else if (i >= startDow+daysInMonth) { dayNum = i-startDow-daysInMonth+1; cls += ' off'; d = new Date(year,month+1,dayNum); }
+        else { dayNum = i-startDow+1; d = new Date(year,month,dayNum); }
+        if (!cls.includes('off') && sameDay(d, today)) cls += ' tdy';
+        if (inRange(d)) cls += ' inr';
+        if (sameDay(d, state.start) && sameDay(d, state.end)) cls += ' one';
+        else if (sameDay(d, state.start)) cls += (inRange(new Date(d.getTime()+86400000))?' sta':' one');
+        else if (sameDay(d, state.end)) cls += ' end';
+        h += '<button class="'+cls+'" data-y="'+year+'" data-m="'+month+'" data-d="'+dayNum+'" data-full="'+fmtYMD(d)+'">'+dayNum+'</button>';
+      }
+      h += '</div>';
+      el.innerHTML = h;
+    }
+
+    function render(){
+      renderMonth(document.getElementById(calLeftId), state.viewYear, state.viewMonth);
+      var nm = state.viewMonth+1, ny = state.viewYear;
+      if (nm>11){ nm=0; ny++; }
+      renderMonth(document.getElementById(calRightId), ny, nm);
+      var txt = '';
+      if (state.start) txt = fmtYMD(state.start);
+      if (state.end) txt += ' — ' + fmtYMD(state.end);
+      document.getElementById(textId).textContent = txt || '请选择日期范围';
+      if (state.start && state.end) onChange(fmtAPI(state.start), fmtAPI(state.end));
+    }
+
+    function onDayClick(y,m,d,full){
+      var dt = parseYMD(full);
+      if (singleDate){
+        state.start = dt; state.end = dt; state.pickingStart = true;
+        render();
+        return;
+      }
+      if (state.pickingStart || !state.start || dt < state.start){
+        state.start = dt; state.end = null; state.pickingStart = false;
+      } else {
+        state.end = dt; state.pickingStart = true;
+      }
+      render();
+    }
+
+    function applyPreset(type){
+      var now = new Date(); now.setHours(0,0,0,0);
+      var s, e;
+      if (type==='today'){ s=now; e=now; }
+      else if (type==='yesterday'){ s=new Date(now-86400000); e=s; }
+      else if (type==='7d'){ s=new Date(now-6*86400000); e=now; }
+      else if (type==='30d'){ s=new Date(now-29*86400000); e=now; }
+      else if (type==='this_week'){ var dow=now.getDay(); s=new Date(now-dow*86400000); e=now; }
+      else if (type==='this_month'){ s=new Date(now.getFullYear(),now.getMonth(),1); e=now; }
+      else { s=new Date(now-29*86400000); e=now; }
+      state.start = s; state.end = e; state.pickingStart = true;
+      state.viewMonth = s.getMonth(); state.viewYear = s.getFullYear();
+      render();
+    }
+
+    // 预设按钮
+    if (filterBtns && filterBtns.length){
+    for (var p=0; p<filterBtns.length; p++){
+      filterBtns[p].addEventListener('click', function(){
+        var r = this.getAttribute('data-range');
+        for (var k=0;k<filterBtns.length;k++) filterBtns[k].classList.remove('active');
+        this.classList.add('active');
+        document.getElementById(btnId).classList.remove('active');
+        document.getElementById(drpId).style.display = 'none';
+        applyPreset(r+'d');
+      });
+    }
+    }
+
+    // 自定义按钮 — 只负责打开，不关闭
+    document.getElementById(btnId).addEventListener('click', function(e){
+      e.stopPropagation();
+      var panel = document.getElementById(drpId);
+      // 关闭所有其他面板（单例模式）
+      var all = document.querySelectorAll('.drp-panel');
+      for (var ap=0; ap<all.length; ap++){ all[ap].style.display = 'none'; }
+      var btn = this;
+      if (!state.start) { if (singleDate) render(); else applyPreset('7d'); } else render();
+      // 延迟一帧打开，避开当前事件周期
+      requestAnimationFrame(function(){
+        var rect = btn.getBoundingClientRect();
+        panel.style.top = (rect.bottom + 6) + 'px';
+        var panelW = 440;
+        var left = rect.right - panelW;
+        if (left < 0) left = 8;
+        panel.style.left = left + 'px';
+        panel.style.display = 'block';
+      });
+    });
+
+    // 面板内点击阻止冒泡，确保不触发外部关闭
+    document.getElementById(drpId).addEventListener('click', function(e){
+      e.stopPropagation();
+    });
+
+    // 预设快捷选项
+    var presets = document.querySelectorAll('#'+drpId+' .drp-preset');
+    for (var q=0;q<presets.length;q++) presets[q].addEventListener('click', function(){
+      for (var u=0;u<presets.length;u++) presets[u].classList.remove('sel');
+      this.classList.add('sel');
+      applyPreset(this.getAttribute('data-d'));
+    });
+
+    // 日历点击
+    document.getElementById(calLeftId).addEventListener('click', function(e){
+      var t = e.target;
+      if (t.classList.contains('arr')){
+        var dir = parseInt(t.getAttribute('data-nav'));
+        state.viewMonth += dir;
+        if (state.viewMonth<0){ state.viewMonth=11; state.viewYear--; }
+        if (state.viewMonth>11){ state.viewMonth=0; state.viewYear++; }
+        render(); return;
+      }
+      if (t.classList.contains('drp-day') && !t.classList.contains('off'))
+        onDayClick(t.getAttribute('data-y'), t.getAttribute('data-m'), t.getAttribute('data-d'), t.getAttribute('data-full'));
+    });
+    document.getElementById(calRightId).addEventListener('click', function(e){
+      var t = e.target;
+      if (t.classList.contains('arr')){
+        var dir = parseInt(t.getAttribute('data-nav'));
+        state.viewMonth += dir;
+        if (state.viewMonth<0){ state.viewMonth=11; state.viewYear--; }
+        if (state.viewMonth>11){ state.viewMonth=0; state.viewYear++; }
+        render(); return;
+      }
+      if (t.classList.contains('drp-day') && !t.classList.contains('off'))
+        onDayClick(t.getAttribute('data-y'), t.getAttribute('data-m'), t.getAttribute('data-d'), t.getAttribute('data-full'));
+    });
+
+    // 全局点击外部关闭（统一处理所有面板）
+
+    return { applyPreset: applyPreset, render: render };
+  }
+
+  // ── 评分总览日期选择器 ──
+  var ratingPicker = createDateRangePicker('rating', 'rating-custom-btn', 'rating-drp',
+    'rating-cal-left', 'rating-cal-right', 'rating-range-text',
+    document.querySelectorAll('#rating-filter .date-btn[data-range]'),
+    function(from, to){ loadRatingOverview(from, to); });
+
+  // ── 商品趋势日期选择器 ──
+  var productPicker = createDateRangePicker('product', 'product-custom-btn', 'product-drp',
+    'product-cal-left', 'product-cal-right', 'product-range-text',
+    document.querySelectorAll('#product-filter .date-btn[data-range]'),
+    function(from, to){ loadProductOverview(from, to); });
+
+  // ── 店铺评分 / 星级 / DSR 日期选择器 ──
+  var storeDF='', storeDT='', starDF='', starDT='', dsrDF='', dsrDT='', trendDF='', trendDT='', dsrKpiDF='', dsrKpiDT='';
+  function initPanelPickers(){
+    var fmt = function(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+    var now = new Date(); now.setHours(0,0,0,0);
+    var d30 = new Date(now.getTime()-29*86400000);
+    storeDF = fmt(d30); storeDT = fmt(now);
+    starDF = fmt(d30); starDT = fmt(now);
+    dsrDF = fmt(d30); dsrDT = fmt(now);
+    trendDF = fmt(d30); trendDT = fmt(now);
+    dsrKpiDF = ''; dsrKpiDT = '';
+    loadStoreRatings(); loadProducts();
+    loadStarData(); loadDsrData(); loadDsrAverages();
+  }
+
+  createDateRangePicker('store', 'store-custom-btn', 'store-drp',
+    'store-cal-left', 'store-cal-right', 'store-range-text',
+    document.querySelectorAll('#store-panel .date-btn[data-range]'),
+    function(f,t){ storeDF=f; storeDT=t; loadStoreRatings(); loadProducts(); });
+  createDateRangePicker('star', 'star-custom-btn', 'star-drp',
+    'star-cal-left', 'star-cal-right', 'star-range-text',
+    document.querySelectorAll('#star-panel .date-btn[data-range]'),
+    function(f,t){ starDF=f; starDT=t; loadStarData(); });
+  createDateRangePicker('dsr', 'dsr-custom-btn', 'dsr-drp',
+    'dsr-cal-left', 'dsr-cal-right', 'dsr-range-text',
+    document.querySelectorAll('#dsr-panel .date-btn[data-range]'),
+    function(f,t){ dsrDF=f; dsrDT=t; loadDsrData(); });
+  createDateRangePicker('dsr-kpi', 'dsr-kpi-custom-btn', 'dsr-kpi-drp',
+    'dsr-kpi-cal-left', 'dsr-kpi-cal-right', 'dsr-kpi-range-text',
+    document.querySelectorAll('#dsr-panel .filter-row .date-btn[data-range]'),
+    function(f,t){ dsrKpiDF=f; dsrKpiDT=t; loadDsrAverages(); });
+  createDateRangePicker('trend', 'trend-custom-btn', 'trend-drp',
+    'trend-cal-left', 'trend-cal-right', 'trend-range-text',
+    document.querySelectorAll('#trend-panel .date-btn[data-range]'),
+    function(f,t){ trendDF=f; trendDT=t; loadTrend(); });
+
+  // ── 全局：点击面板外关闭 ──
+  document.addEventListener('click', function(e){
+    var panels = document.querySelectorAll('.drp-panel');
+    for (var i=0; i<panels.length; i++){
+      if (panels[i].style.display === 'block') panels[i].style.display = 'none';
+    }
+  });
+
+  // ── 首页图表 ──
+  var homeChartsReady = false;
+  var ratingChart = null, productChart = null, storeChart = null;
+  var ratingDF = null, ratingDT = null, productDF = null, productDT = null;
+
+  function getDateRange(days){
+    var to = new Date();
+    var from = new Date();
+    from.setDate(from.getDate() - days);
+    var fmt = function(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+    return {date_from: fmt(from), date_to: fmt(to)};
+  }
+
+  function initHomeCharts(){
+    if (typeof Chart === 'undefined'){ setTimeout(initHomeCharts, 200); return; }
+    homeChartsReady = true;
+    var r = getDateRange(29);
+    ratingDF = r.date_from; ratingDT = r.date_to;
+    productDF = r.date_from; productDT = r.date_to;
+    loadRatingOverview(r.date_from, r.date_to);
+    loadProductOverview(r.date_from, r.date_to);
+  }
+
+  function loadRatingOverview(df, dt){
+    ratingDF = df; ratingDT = dt;
+    var homeBrand = el('home-brand');
+    var brand = homeBrand ? homeBrand.value : '';
+    var url = '/api/home/rating-overview?date_from='+encodeURIComponent(df)+'&date_to='+encodeURIComponent(dt);
+    if (brand) url += '&brand='+encodeURIComponent(brand);
+    get(url, function(err, d){
+      if (err){ document.getElementById('home-rating-chart').textContent = '❌ 加载失败'; return; }
+      var data = d.data || [];
+      if (data.length === 0){ document.getElementById('home-rating-chart').textContent = '暂无数据'; return; }
+      var labels = [], values = [];
+      for (var i=0;i<data.length;i++){ labels.push(data[i].date); values.push(data[i].weighted_avg); }
+      document.getElementById('home-rating-chart').innerHTML = '<canvas id="hrc" style="width:100%;height:350px"></canvas>';
+      var ctx = document.getElementById('hrc').getContext('2d');
+      if (ratingChart) ratingChart.destroy();
+      ratingChart = new Chart(ctx, {
+        type:'line', data:{labels:labels, datasets:[{label:'加权平均评分',data:values,borderColor:'#1890ff',backgroundColor:'rgba(24,144,255,.08)',fill:true,tension:.3,pointRadius:3}]},
+        options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:18}},plugins:{legend:{display:false},datalabels:{anchor:'end',align:'top',offset:4,formatter:function(v){return v.toFixed(1)+'%';},font:{size:10,weight:'bold'},color:'#555'}},scales:{y:{min:0,max:105,ticks:{callback:function(v){return v+'%';},stepSize:20}}}},
+        plugins: typeof ChartDataLabels!=='undefined'?[ChartDataLabels]:[]
+      });
+    });
+  }
+
+  function loadProductOverview(df, dt){
+    productDF = df; productDT = dt;
+    var homeBrand = el('home-brand');
+    var brand = homeBrand ? homeBrand.value : '';
+    var url = '/api/home/product-overview?date_from='+encodeURIComponent(df)+'&date_to='+encodeURIComponent(dt);
+    if (brand) url += '&brand='+encodeURIComponent(brand);
+    get(url, function(err, d){
+      if (err){ document.getElementById('home-product-chart').textContent = '❌ 加载失败'; return; }
+      var data = d.data || [];
+      if (data.length === 0){ document.getElementById('home-product-chart').textContent = '暂无数据'; return; }
+      var labels = [], ratings = [], reviews = [];
+      for (var i=0;i<data.length;i++){ labels.push(data[i].date); ratings.push(data[i].weighted_avg_rating); reviews.push(data[i].weighted_avg_reviews); }
+      document.getElementById('home-product-chart').innerHTML = '<canvas id="hpc" style="width:100%;height:350px"></canvas>';
+      var ctx = document.getElementById('hpc').getContext('2d');
+      if (productChart) productChart.destroy();
+      productChart = new Chart(ctx, {
+        type:'line', data:{labels:labels, datasets:[
+          {label:'商品评分(%)',data:ratings,borderColor:'#1890ff',tension:.3,pointRadius:3,yAxisID:'y'},
+          {label:'评价数',data:reviews,borderColor:'#fa541c',tension:.3,pointRadius:3,yAxisID:'y1'}
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:18}},plugins:{legend:{position:'bottom',labels:{boxWidth:12,padding:15}},datalabels:{anchor:'end',align:'top',offset:4,formatter:function(v,ctx){return ctx.datasetIndex===0?v.toFixed(1)+'%':(v>=1000?(v/1000).toFixed(1)+'k':v.toFixed(0));},font:{size:10,weight:'bold'},color:'#555'}},scales:{y:{type:'linear',position:'left',min:0,max:105,ticks:{callback:function(v){return v+'%'},stepSize:20}},y1:{type:'linear',position:'right',min:0,grid:{display:false}}}},
+        plugins: typeof ChartDataLabels!=='undefined'?[ChartDataLabels]:[]
+      });
+    });
+  }
+
+  // 预加载 Chart.js
+  (function(){
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+    s.onload = function(){
+      var s2 = document.createElement('script');
+      s2.src = 'https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js';
+      s2.onload = function(){ chartLoaded = true; initHomeCharts(); };
+      s2.onerror = function(){ chartLoaded = true; initHomeCharts(); };
+      document.head.appendChild(s2);
+    };
+    document.head.appendChild(s);
+  })();
+
+  var alertPopupStore = '', alertPopupChart = null, alertPopupDays = 7;
+
+  window.openAlertPopup = function(storeName){
+    alertPopupStore = storeName;
+    el('alert-popup-title').textContent = '📊 ' + storeName + ' 评分趋势';
+    el('alert-overlay').style.display = 'block';
+    el('alert-popup').style.display = 'block';
+    document.querySelectorAll('.alert-range-btn').forEach(function(b){ b.classList.remove('active'); });
+    document.querySelector('.alert-range-btn[data-days="7"]').classList.add('active');
+    alertPopupDays = 7;
+    loadAlertPopupData();
+  }
+
+  window.closeAlertPopup = function(){
+    el('alert-overlay').style.display = 'none';
+    el('alert-popup').style.display = 'none';
+    if (alertPopupChart){ alertPopupChart.destroy(); alertPopupChart = null; }
+  }
+
+  function loadAlertPopupData(){
+    var today = new Date(); today.setHours(0,0,0,0);
+    var from = new Date(today.getTime() - (alertPopupDays-1)*86400000);
+    var fmt = function(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+    var df = fmt(from), dt = fmt(today);
+    get('/api/store-ratings?store='+encodeURIComponent(alertPopupStore)+'&date_from='+df+'&date_to='+dt, function(err, d){
+      if (err){ el('alert-popup-chart').textContent = '❌ 加载失败'; return; }
+      var list = (d.ratings||[]).sort(function(a,b){ return a.date.localeCompare(b.date); });
+      if (list.length === 0){ el('alert-popup-chart').textContent = '暂无数据'; el('alert-popup-summary').innerHTML = ''; return; }
+      var vals = list.map(function(r){ return r.rating; });
+      var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+      var latest = vals[vals.length-1], avg = (vals.reduce(function(a,b){return a+b;},0)/vals.length);
+      el('alert-popup-summary').innerHTML = '<span>最低：<strong style=\"color:#cf1322\">'+min.toFixed(1)+'%</strong></span>'+
+        '<span>最高：<strong style=\"color:#389e0d\">'+max.toFixed(1)+'%</strong></span>'+
+        '<span>最新：<strong style=\"color:#1890ff\">'+latest.toFixed(1)+'%</strong></span>'+
+        '<span>均值：<strong>'+avg.toFixed(1)+'%</strong></span>';
+      var labels = list.map(function(r){ return r.date; });
+      el('alert-popup-chart').innerHTML = '<canvas id=\"apc\" style=\"width:100%;height:300px\"></canvas>';
+      var ctx = document.getElementById('apc').getContext('2d');
+      if (alertPopupChart) alertPopupChart.destroy();
+      alertPopupChart = new Chart(ctx, {
+        type:'line', data:{labels:labels, datasets:[{label:'评分',data:vals,borderColor:'#1890ff',backgroundColor:'rgba(24,144,255,.08)',fill:true,tension:.3,pointRadius:4}]},
+        options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:20}},plugins:{legend:{display:false},datalabels:{anchor:'end',align:'top',offset:4,formatter:function(v){return v.toFixed(1)+'%';},font:{size:10,weight:'bold'},color:'#555'}},scales:{y:{min:0,max:105,ticks:{callback:function(v){return v+'%';},stepSize:20}}}},
+        plugins: typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : []
+      });
+    });
+  }
+
+  document.addEventListener('click', function(e){
+    if (e.target.classList.contains('alert-range-btn')){
+      document.querySelectorAll('.alert-range-btn').forEach(function(b){ b.classList.remove('active'); });
+      e.target.classList.add('active');
+      alertPopupDays = parseInt(e.target.getAttribute('data-days'))||7;
+      loadAlertPopupData();
+    }
+  });
+
+  log('✅ 所有事件绑定完成', '#52c41a');
+})();
+</script>
+<div id="alert-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.35);z-index:9999" onclick="closeAlertPopup()"></div>
+<div id="alert-popup" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.15);z-index:10000;width:700px;max-width:95vw;max-height:90vh;overflow-y:auto;padding:24px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <h3 id="alert-popup-title" style="margin:0;font-size:16px"></h3>
+    <button onclick="closeAlertPopup()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;line-height:1">&times;</button>
+  </div>
+  <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+    <button class="alert-range-btn active" data-days="7">近7天</button>
+    <button class="alert-range-btn" data-days="15">近15天</button>
+    <button class="alert-range-btn" data-days="30">近30天</button>
+    <button class="alert-range-btn" data-days="90">近90天</button>
+  </div>
+  <div id="alert-popup-summary" style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap"></div>
+  <div id="alert-popup-chart" style="width:100%;height:300px;background:#fafafa;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px">加载中...</div>
+</div>
+<style>
+.alert-range-btn{padding:4px 12px;border:1px solid #d9d9d9;border-radius:14px;background:#fff;color:#666;font-size:12px;cursor:pointer;transition:.2s}
+.alert-range-btn:hover{border-color:#1890ff;color:#1890ff}
+.alert-range-btn.active{background:#1890ff;color:#fff;border-color:#1890ff}
+.alert-card-item:hover{box-shadow:0 2px 8px rgba(0,0,0,.12);transform:translateY(-1px);transition:.15s}
+</style>
+</body>
+</html>

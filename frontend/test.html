@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>API Test</title>
+<style>body{font-family:sans-serif;padding:20px;background:#0a0a0f;color:#e4e4ec}
+.ok{color:#22c55e}.err{color:#ef4444}</style></head>
+<body>
+<h2>API 连通性测试</h2>
+<div id="results">检测中...</div>
+<script>
+const API = 'http://127.0.0.1:8771';
+const endpoints = ['/api/summary','/api/stores','/api/dates','/api/products','/api/store-ratings','/api/low-rating?threshold=40','/api/star-data','/api/trends/store','/api/trends/product'];
+
+async function test() {
+  let html = '';
+  for (const ep of endpoints) {
+    try {
+      const r = await fetch(API + ep);
+      const d = await r.json();
+      html += `<p class="ok">✅ ${ep} — ${r.status} — ${JSON.stringify(d).substring(0,80)}...</p>`;
+    } catch(e) {
+      html += `<p class="err">❌ ${ep} — ${e.message}</p>`;
+    }
+  }
+  document.getElementById('results').innerHTML = html;
+}
+test();
+</script>
+</body></html>

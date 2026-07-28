@@ -1,0 +1,7 @@
+__pycache__
+*.pyc
+*.log
+.hermes
+*.ps1
+*.bat
+nul
