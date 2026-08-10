@@ -25,6 +25,15 @@
 - 数据库密码：部署环境变量配置
 - 数据库连接信息不要提交到 GitHub；建议通过 `docker-compose.yml`、`.env` 或服务器密钥管理注入。
 
+### 7 月示例数据（SQLite）
+
+- 数据库文件：`backend/data/pdd_july_sample.sqlite3`
+- 示例区间：`2026-07-01` 至 `2026-07-31`
+- 数据规模：6 家店铺、18 个商品、558 条商品记录、186 条店铺评分记录、186 条星级指标记录
+- 前端入口：左侧导航“7月示例数据”
+- 示例接口：`/api/sample-data/summary`、`/api/sample-data/records`、`/api/sample-data/trends`
+- 用途：演示前端筛选、店铺维度、商品评分趋势和评价数趋势；不覆盖生产 MySQL 数据。
+
 ## 四、部署目录与访问地址
 
 - 服务器项目目录：`/home/lingchi/pdd-rating/`
@@ -75,4 +84,3 @@ docker compose up -d pdd-dashboard
 - [ ] 允许访问的钉钉部门、职位或角色。
 - [ ] iframe 嵌入来源白名单。
 - [ ] 是否需要中台代理 API，以及代理地址和鉴权方式。
-
