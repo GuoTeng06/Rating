@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <title>拼多多数据看板</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -186,7 +187,7 @@ body{background:var(--canvas);color:var(--ink)}
 .sidebar h2{text-align:left;font-size:18px;padding:0 14px;margin-bottom:24px}
 .nav-item{border-left:0;border-radius:8px;margin:4px 0;padding:11px 14px;color:#c9cfdb}
 .nav-item.active{background:rgba(224,46,36,.95);color:#fff;border-left:0}
-.main{padding:26px 30px 48px;max-width:1680px}
+.main{flex:1;min-width:0;padding:26px 30px 48px;max-width:none}
 .dashboard-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px}
 .dashboard-head h1{font-size:24px;line-height:1.25;margin:0;letter-spacing:-.02em}
 .dashboard-head p{font-size:13px;color:var(--muted);margin:7px 0 0}
@@ -770,7 +771,23 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
     }
   }
 
-  get('/api/summary', function(err, d){
+  var bootstrapData = null, bootstrapLoading = false, bootstrapCallbacks = [];
+  function getInitial(key, cb){
+    if (bootstrapData){ cb(null, bootstrapData[key]); return; }
+    bootstrapCallbacks.push({key:key, cb:cb});
+    if (bootstrapLoading) return;
+    bootstrapLoading = true;
+    get('/api/bootstrap', function(err, data){
+      bootstrapLoading = false;
+      bootstrapData = err ? null : data;
+      var callbacks = bootstrapCallbacks.splice(0);
+      for (var i=0; i<callbacks.length; i++){
+        callbacks[i].cb(err, err ? null : data[callbacks[i].key]);
+      }
+    });
+  }
+
+  getInitial('summary', function(err, d){
     if (err) return;
     el('kpi-stores').textContent = d.total_stores || 0;
     el('kpi-products').textContent = d.total_products || 0;
@@ -779,14 +796,14 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
     log('✅ 摘要: ' + d.total_stores + '店 ' + d.total_products + '品', '#52c41a');
   });
 
-  get('/api/dates', function(err, d){
+  getInitial('dates', function(err, d){
     if (err) return;
     var dates = Array.isArray(d) ? d : (d.dates || []);
     log('✅ 日期: ' + dates.length + '天', '#52c41a');
     initPanelPickers();
   });
 
-  get('/api/stores', function(err, d){
+  getInitial('stores', function(err, d){
     if (err) return;
     var stores = d.stores || d || [];
     var names = [];
@@ -804,7 +821,7 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
     log('✅ 店铺: ' + names.length + '家', '#52c41a');
   });
 
-  get('/api/brands', function(err, d){
+  getInitial('brands', function(err, d){
     if (err) return;
     var brands = d.brands || d || [];
     var starBrand = el('star-brand'), filterBrand = el('brand-filter');
@@ -874,7 +891,7 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
   });
   }
 
-  loadAlerts();
+  getInitial('summary', function(err){ if (!err) loadAlerts(); });
   el('alert-threshold').addEventListener('change', onThresholdChange);
 
   var storeData = [], storePage = 1, storePageSize = 10, storeTableMode = 'latest';
@@ -1622,8 +1639,10 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
       }
       for (var j=0; j<navItems.length; j++) navItems[j].classList.remove('active');
       this.classList.add('active');
+      if (target === 'store-panel') { loadStoreRatings(); loadProducts(); }
       if (target === 'trend-panel') scheduleTrendRefresh();
-      if (target === 'dsr-panel') loadDsrAverages();
+      if (target === 'star-panel') loadStarData();
+      if (target === 'dsr-panel') { loadDsrData(); loadDsrAverages(); }
     });
   }
 
@@ -2089,9 +2108,6 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
     dsrDF = fmt(d30); dsrDT = fmt(now);
     trendDF = fmt(d30); trendDT = fmt(now);
     dsrKpiDF = ''; dsrKpiDT = '';
-    loadStoreRatings(); loadProducts();
-    loadStarData(); loadDsrData(); loadDsrAverages();
-    scheduleTrendRefresh();
   }
 
   createDateRangePicker('store', 'store-custom-btn', 'store-drp',
@@ -2141,6 +2157,7 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
   }
 
   function initHomeCharts(){
+    if (!bootstrapData){ setTimeout(initHomeCharts, 100); return; }
     if (typeof Chart === 'undefined'){ setTimeout(initHomeCharts, 200); return; }
     homeChartsReady = true;
     var r = getDateRange(29);
@@ -2233,7 +2250,7 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
     }
   }
 
-  get('/api/summary', function(err, d){
+  getInitial('summary', function(err, d){
     if (err || !d) return;
     var freshness = el('data-freshness');
     if (freshness) freshness.textContent = '数据更新：' + (d.update_time || '未知') + ' · 最新 ' + ((d.date_range||[])[1] || '');
