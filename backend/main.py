@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from data_loader import load_all_data, get_summary
 from collections import defaultdict
 
@@ -21,7 +22,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FRONTEND_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frontend', 'index.html')
+FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frontend')
+FRONTEND_PATH = os.path.join(FRONTEND_DIR, 'index.html')
+
+# Serve static files (Chart.js, etc.) from /frontend/.
+app.mount("/frontend", StaticFiles(directory=FRONTEND_DIR), name="frontend")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -326,11 +331,15 @@ def api_low_rating(threshold: float = Query(40.0)):
     data = load_all_data()
     ratings = data['storeRatings']
 
-    # 取每个店铺最新日期
-    if not data['dates']:
+    if not ratings:
         return {'stores': [], 'threshold': threshold}
 
-    latest_date = data['dates'][-1]
+    # Use the newest date in store ratings.  The global dates list may also
+    # include dates that only exist in other source tables.
+    dates_in_ratings = sorted(set(r['date'] for r in ratings))
+    if not dates_in_ratings:
+        return {'stores': [], 'threshold': threshold}
+    latest_date = dates_in_ratings[-1]
     latest = [r for r in ratings if r['date'] == latest_date and r['rating'] < threshold]
     latest.sort(key=lambda r: r['rating'])
 

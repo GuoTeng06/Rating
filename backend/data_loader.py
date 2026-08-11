@@ -2,16 +2,17 @@
 拼多多评分看板 — MySQL 数据加载器
 """
 import os
+import re
 import time
 from collections import defaultdict
 import pymysql
 
 DB_CONFIG = {
-    'host': os.environ.get('MYSQL_HOST', '192.168.16.38'),
+    'host': os.environ['MYSQL_HOST'],
     'port': int(os.environ.get('MYSQL_PORT', '3306')),
-    'user': os.environ.get('MYSQL_USER', 'user1'),
-    'password': os.environ.get('MYSQL_PASSWORD', '123456'),
-    'database': os.environ.get('MYSQL_DATABASE', 'pdd rating'),
+    'user': os.environ['MYSQL_USER'],
+    'password': os.environ['MYSQL_PASSWORD'],
+    'database': os.environ['MYSQL_DATABASE'],
     'charset': 'utf8mb4',
     'connect_timeout': 5,
 }
@@ -24,9 +25,25 @@ def _brand(store):
             return b
     return '白牌'
 
+def _clean_brand(value, store):
+    """Clean malformed brand values and infer a brand from the store name."""
+    brand = str(value or '').strip()
+    if (
+        not brand
+        or brand.lower() in {'none', 'null', 'nan'}
+        or re.fullmatch(r'\d{4}[-/.]\d{1,2}[-/.]\d{1,2}', brand)
+        or re.fullmatch(r'\d+(?:\.0+)?', brand)
+    ):
+        return _brand(store)
+    return brand
+
 def _pct(val):
     if val is None: return 0
-    s = str(val).strip().rstrip('%')
+    s = str(val).strip()
+    m = re.search(r'([\d.]+)\s*%', s)
+    if m:
+        return float(m.group(1))
+    s = s.rstrip('%')
     try: return float(s)
     except: return 0
 
@@ -72,23 +89,30 @@ def load_all_data(force=False):
         seen.add(key)
         try: rev = int(float(reviews_raw))
         except: rev = 0
-        brand = brand_raw if brand_raw and brand_raw != 'None' else _brand(store)
+        brand = _clean_brand(brand_raw, store)
         products.append({'id': item_id, 'title': title, 'rating': r, 'reviews': rev, 'store': store, 'brand': brand, 'date': date, 'product_name': product_name, 'product_code': product_code})
         stores_set.add(store); dates_set.add(date); brands_set.add(brand)
 
     # 2. 店铺评分表
     cur.execute("SELECT * FROM `店铺评分表`")
     cols2 = {d[0]: i for i, d in enumerate(cur.description)}
+    rating_col = next((
+        name for name in ('店铺评价分排名', '近90天评分总览', '近90天评价总览')
+        if name in cols2
+    ), None)
+    if rating_col is None:
+        raise KeyError(f"店铺评分表缺少评分字段，实际字段：{list(cols2.keys())}")
+
     store_ratings = []
     for row in cur.fetchall():
-        rating_raw = str(row[cols2['近90天评分总览']] or '').strip()
+        rating_raw = str(row[cols2[rating_col]] or '').strip()
         store = str(row[cols2['店铺名称']] or '').strip()
         brand_raw = str(row[cols2['品牌']] or '').strip()
         date = str(row[cols2['日期']] or '').strip()
         if not store or not date: continue
         r = _pct(rating_raw)
         if r == 0: continue
-        brand = brand_raw if brand_raw and brand_raw != 'None' else _brand(store)
+        brand = _clean_brand(brand_raw, store)
         store_ratings.append({'store': store, 'date': date, 'rating': r, 'brand': brand})
         stores_set.add(store); dates_set.add(date)
 
@@ -118,7 +142,7 @@ def load_all_data(force=False):
                 'store': s_store,
                 'date': s_date,
                 'star': s_star,
-                'brand': s_brand if s_brand and s_brand != 'None' else _brand(s_store),
+                'brand': _clean_brand(s_brand, s_store),
                 'items': []
             }
             star_data.append(current)

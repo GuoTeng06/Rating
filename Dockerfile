@@ -14,4 +14,4 @@ COPY frontend/ /frontend/
 EXPOSE 8768
 
 # 启动
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8768"]
+CMD ["gunicorn", "main:app", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8768"]
