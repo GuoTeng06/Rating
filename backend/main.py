@@ -64,6 +64,24 @@ def api_brands():
     return [{'name': b, 'store_count': len(data['brandStores'].get(b, []))} for b in data['brands']]
 
 
+@app.get("/api/bootstrap")
+def api_bootstrap():
+    """Return the metadata required for the initial dashboard render in one request."""
+    data = load_all_data()
+    return {
+        'summary': get_summary(data),
+        'dates': data['dates'],
+        'stores': [
+            {'name': s, 'brand': data['storeBrand'].get(s, '白牌')}
+            for s in data['stores']
+        ],
+        'brands': [
+            {'name': b, 'store_count': len(data['brandStores'].get(b, []))}
+            for b in data['brands']
+        ],
+    }
+
+
 @app.get("/api/products")
 def api_products(
     store: str = Query(None),
