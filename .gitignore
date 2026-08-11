@@ -7,3 +7,6 @@ nul
 *_test*.ps1
 check_*.ps1
 test_*.ps1
+.env
+*.backup-*
+*.bak-*
