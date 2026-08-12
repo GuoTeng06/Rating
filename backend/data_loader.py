@@ -3,6 +3,7 @@
 """
 import os
 import re
+import threading
 import time
 from collections import defaultdict
 import pymysql
@@ -49,18 +50,17 @@ def _pct(val):
 
 _cache = None
 _cache_time = 0
+_cache_refreshing = False
+_cache_refresh_lock = threading.Lock()
 CACHE_TTL = 300
 
 def _get_conn():
     return pymysql.connect(**DB_CONFIG)
 
 
-def load_all_data(force=False):
+def _load_all_data_from_db():
     global _cache, _cache_time
     now = time.time()
-    if not force and _cache is not None and (now - _cache_time) < CACHE_TTL:
-        return _cache
-
     conn = _get_conn()
     cur = conn.cursor()
 
@@ -214,6 +214,37 @@ def load_all_data(force=False):
     _cache = result; _cache_time = now
     print(f"[MySQL] products={len(products)}, storeRatings={len(store_ratings)}, stores={len(all_stores)}, dates={len(all_dates)}, starData={len(star_data)}")
     return result
+
+
+def _refresh_cache_in_background():
+    global _cache_refreshing
+    try:
+        _load_all_data_from_db()
+    except Exception as exc:
+        # Keep serving the previous valid snapshot when a background refresh
+        # fails; the next request after TTL will retry the refresh.
+        print(f"[MySQL] background refresh failed: {exc}")
+    finally:
+        with _cache_refresh_lock:
+            _cache_refreshing = False
+
+
+def load_all_data(force=False):
+    """Return the cached snapshot and refresh stale data without blocking users."""
+    global _cache_refreshing
+    now = time.time()
+    if not force and _cache is not None:
+        if (now - _cache_time) >= CACHE_TTL:
+            with _cache_refresh_lock:
+                if not _cache_refreshing:
+                    _cache_refreshing = True
+                    threading.Thread(
+                        target=_refresh_cache_in_background,
+                        name="dashboard-cache-refresh",
+                        daemon=True,
+                    ).start()
+        return _cache
+    return _load_all_data_from_db()
 
 
 def get_summary(data=None):

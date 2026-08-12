@@ -28,6 +28,8 @@ FRONTEND_PATH = os.path.join(FRONTEND_DIR, 'index.html')
 # Serve static files (Chart.js, etc.) from /frontend/.
 app.mount("/frontend", StaticFiles(directory=FRONTEND_DIR), name="frontend")
 
+ALERT_EXCLUDED_BRANDS = {'白牌'}
+
 
 @app.on_event("startup")
 def warm_data_cache():
@@ -80,7 +82,7 @@ def get_brand_summaries(data, threshold=40.0, date_from=None, date_to=None):
             'store_count': len(data['brandStores'].get(brand, [])),
             'product_count': len(products),
             'avg_store_rating': round(sum(latest_ratings) / len(latest_ratings), 2) if latest_ratings else None,
-            'low_count': sum(1 for rating in latest_ratings if rating < threshold),
+            'low_count': 0 if brand in ALERT_EXCLUDED_BRANDS else sum(1 for rating in latest_ratings if rating < threshold),
             'latest_date': latest_date,
         })
     return result
@@ -504,6 +506,10 @@ def api_low_rating(
     """低于阈值的店铺预警"""
     data = load_all_data()
     ratings = filter_by_owner(data, data['storeRatings'], owner)
+    ratings = [
+        rating for rating in ratings
+        if rating.get('brand') not in ALERT_EXCLUDED_BRANDS
+    ]
 
     if brand:
         ratings = [rating for rating in ratings if rating['brand'] == brand]
