@@ -29,6 +29,63 @@ FRONTEND_PATH = os.path.join(FRONTEND_DIR, 'index.html')
 app.mount("/frontend", StaticFiles(directory=FRONTEND_DIR), name="frontend")
 
 
+@app.on_event("startup")
+def warm_data_cache():
+    """Load the MySQL snapshot before accepting user requests.
+
+    The dashboard is read-mostly and the loader already keeps a five-minute
+    in-process cache. Warming it here prevents the first visitor from waiting
+    for the full database scan while the initial page is rendering.
+    """
+    load_all_data()
+
+
+def owner_stores(data, owner):
+    """负责人仅存于店铺评分表，其他数据通过店铺名称关联。"""
+    if not owner or not owner.strip():
+        return None
+    needle = owner.strip().lower()
+    return {
+        store for store, value in data.get('storeOwner', {}).items()
+        if needle in str(value or '').lower()
+    }
+
+
+def filter_by_owner(data, rows, owner, store_key='store'):
+    stores = owner_stores(data, owner)
+    if stores is None:
+        return rows
+    return [row for row in rows if row.get(store_key, '') in stores]
+
+
+def get_brand_summaries(data, threshold=40.0, date_from=None, date_to=None):
+    """Small metadata payload used by the homepage brand cards."""
+    result = []
+    for brand in data['brands']:
+        products = [item for item in data['products'] if item['brand'] == brand]
+        ratings = [item for item in data['storeRatings'] if item['brand'] == brand]
+        if date_from:
+            products = [item for item in products if item['date'] >= date_from]
+            ratings = [item for item in ratings if item['date'] >= date_from]
+        if date_to:
+            products = [item for item in products if item['date'] <= date_to]
+            ratings = [item for item in ratings if item['date'] <= date_to]
+        latest_date = max((item['date'] for item in ratings), default='')
+        latest_ratings = [
+            item['rating'] for item in ratings
+            if item['date'] == latest_date and item['rating'] is not None
+        ]
+        result.append({
+            'name': brand,
+            'store_count': len(data['brandStores'].get(brand, [])),
+            'product_count': len(products),
+            'avg_store_rating': round(sum(latest_ratings) / len(latest_ratings), 2) if latest_ratings else None,
+            'low_count': sum(1 for rating in latest_ratings if rating < threshold),
+            'latest_date': latest_date,
+        })
+    return result
+
+
 @app.get("/", response_class=HTMLResponse)
 def serve_frontend():
     with open(FRONTEND_PATH, "r", encoding="utf-8") as f:
@@ -49,7 +106,7 @@ def api_summary():
 @app.get("/api/stores")
 def api_stores():
     data = load_all_data()
-    return [{'name': s, 'brand': data['storeBrand'].get(s, '白牌')} for s in data['stores']]
+    return [{'name': s, 'brand': data['storeBrand'].get(s, '白牌'), 'owner': data['storeOwner'].get(s, '')} for s in data['stores']]
 
 
 @app.get("/api/dates")
@@ -59,9 +116,20 @@ def api_dates():
 
 
 @app.get("/api/brands")
-def api_brands():
+def api_brands(
+    threshold: float = Query(40.0),
+    date_from: str = Query(None),
+    date_to: str = Query(None),
+    owner: str = Query(None),
+):
     data = load_all_data()
-    return [{'name': b, 'store_count': len(data['brandStores'].get(b, []))} for b in data['brands']]
+    if owner:
+        stores = owner_stores(data, owner) or set()
+        data = dict(data)
+        data['products'] = [p for p in data['products'] if p['store'] in stores]
+        data['storeRatings'] = [r for r in data['storeRatings'] if r['store'] in stores]
+        data['brandStores'] = {brand: [store for store in names if store in stores] for brand, names in data['brandStores'].items()}
+    return get_brand_summaries(data, threshold, date_from, date_to)
 
 
 @app.get("/api/bootstrap")
@@ -72,13 +140,84 @@ def api_bootstrap():
         'summary': get_summary(data),
         'dates': data['dates'],
         'stores': [
-            {'name': s, 'brand': data['storeBrand'].get(s, '白牌')}
+            {'name': s, 'brand': data['storeBrand'].get(s, '白牌'), 'owner': data['storeOwner'].get(s, '')}
             for s in data['stores']
         ],
-        'brands': [
-            {'name': b, 'store_count': len(data['brandStores'].get(b, []))}
-            for b in data['brands']
-        ],
+        'owners': sorted(set(owner for owner in data.get('storeOwner', {}).values() if owner)),
+        'brands': get_brand_summaries(data),
+    }
+
+
+@app.get("/api/home/brand-detail")
+def api_home_brand_detail(
+    brand: str = Query(None),
+    date_from: str = Query(None),
+    date_to: str = Query(None),
+    owner: str = Query(None),
+):
+    """Brand-linked home-page data: summary, latest stores, and latest products."""
+    data = load_all_data()
+    products = data['products']
+    ratings = data['storeRatings']
+    products = filter_by_owner(data, products, owner)
+    ratings = filter_by_owner(data, ratings, owner)
+
+    if brand:
+        products = [p for p in products if p['brand'] == brand]
+        ratings = [r for r in ratings if r['brand'] == brand]
+    if date_from:
+        products = [p for p in products if p['date'] >= date_from]
+        ratings = [r for r in ratings if r['date'] >= date_from]
+    if date_to:
+        products = [p for p in products if p['date'] <= date_to]
+        ratings = [r for r in ratings if r['date'] <= date_to]
+
+    stores = sorted(set(p['store'] for p in products) | set(r['store'] for r in ratings))
+    dates = sorted(set(p['date'] for p in products) | set(r['date'] for r in ratings))
+
+    latest_ratings = {}
+    for rating in ratings:
+        store = rating['store']
+        if store not in latest_ratings or rating['date'] > latest_ratings[store]['date']:
+            latest_ratings[store] = rating
+
+    store_rows = []
+    for store in stores:
+        rating = latest_ratings.get(store, {})
+        store_rows.append({
+            'store': store,
+            'brand': rating.get('brand') or data['storeBrand'].get(store, '白牌'),
+            'rating': rating.get('rating'),
+            'date': rating.get('date', ''),
+        })
+    store_rows.sort(key=lambda row: ((row['rating'] is None), row['rating'] or 0, row['store']))
+
+    latest_products = {}
+    for product in products:
+        product_id = product['id']
+        if product_id not in latest_products or product['date'] > latest_products[product_id]['date']:
+            latest_products[product_id] = product
+    product_rows = sorted(
+        latest_products.values(),
+        key=lambda product: (product['date'], product['rating'], product['reviews']),
+        reverse=True,
+    )[:12]
+
+    avg_rating = None
+    rating_values = [row['rating'] for row in store_rows if row['rating'] is not None]
+    if rating_values:
+        avg_rating = round(sum(rating_values) / len(rating_values), 2)
+
+    return {
+        'brand': brand or '',
+        'summary': {
+            'total_stores': len(stores),
+            'total_products': len(products),
+            'total_dates': len(dates),
+            'avg_store_rating': avg_rating,
+        },
+        'stores': store_rows,
+        'products': product_rows,
     }
 
 
@@ -90,9 +229,11 @@ def api_products(
     date_to: str = Query(None),
     search: str = Query(None),
     rating_min: float = Query(None),
+    owner: str = Query(None),
 ):
     data = load_all_data()
     products = data['products']
+    products = filter_by_owner(data, products, owner)
 
     if store:
         stores_list = [s.strip() for s in store.split(',') if s.strip()]
@@ -136,9 +277,11 @@ def api_store_ratings(
     date_from: str = Query(None),
     date_to: str = Query(None),
     rating_min: float = Query(None),
+    owner: str = Query(None),
 ):
     data = load_all_data()
     ratings = data['storeRatings']
+    ratings = filter_by_owner(data, ratings, owner)
 
     if store:
         ratings = [r for r in ratings if r['store'] == store]
@@ -161,9 +304,11 @@ def api_star_data(
     brand: str = Query(None),
     date_from: str = Query(None),
     date_to: str = Query(None),
+    owner: str = Query(None),
 ):
     data = load_all_data()
     star = data['starData']
+    star = filter_by_owner(data, star, owner)
 
     if store:
         star = [s for s in star if s['store'] == store]
@@ -183,10 +328,12 @@ def api_star_averages(
     date_from: str = Query(None),
     date_to: str = Query(None),
     store: str = Query(None),
+    owner: str = Query(None),
 ):
     """综合体验星级 5 个维度的全店均值"""
     data = load_all_data()
     star = data['starData']
+    star = filter_by_owner(data, star, owner)
 
     if store:
         stores = [s.strip() for s in store.split(',') if s.strip()]
@@ -233,10 +380,11 @@ def api_product_trends(
     store: str = Query(None),
     date_from: str = Query(None),
     date_to: str = Query(None),
+    owner: str = Query(None),
 ):
     """商品评分趋势：每天该店铺所有商品的平均评分和总评价数"""
     data = load_all_data()
-    products = data['products']
+    products = filter_by_owner(data, data['products'], owner)
 
     if store:
         products = [p for p in products if p['store'] == store]
@@ -271,10 +419,11 @@ def api_store_trends(
     store: str = Query(None),
     date_from: str = Query(None),
     date_to: str = Query(None),
+    owner: str = Query(None),
 ):
     """店铺近90天评分趋势"""
     data = load_all_data()
-    ratings = data['storeRatings']
+    ratings = filter_by_owner(data, data['storeRatings'], owner)
 
     if store:
         ratings = [r for r in ratings if r['store'] == store]
@@ -306,10 +455,11 @@ def api_store_product_trends(
     store: str = Query(None),
     date_from: str = Query(None),
     date_to: str = Query(None),
+    owner: str = Query(None),
 ):
     """多店铺商品评分+评价数趋势（逗号分隔或单个）"""
     data = load_all_data()
-    products = data['products']
+    products = filter_by_owner(data, data['products'], owner)
 
     stores = [s.strip() for s in store.split(',') if s.strip()] if store else []
 
@@ -344,10 +494,23 @@ def api_store_product_trends(
 
 
 @app.get("/api/low-rating")
-def api_low_rating(threshold: float = Query(40.0)):
+def api_low_rating(
+    threshold: float = Query(40.0),
+    brand: str = Query(None),
+    date_from: str = Query(None),
+    date_to: str = Query(None),
+    owner: str = Query(None),
+):
     """低于阈值的店铺预警"""
     data = load_all_data()
-    ratings = data['storeRatings']
+    ratings = filter_by_owner(data, data['storeRatings'], owner)
+
+    if brand:
+        ratings = [rating for rating in ratings if rating['brand'] == brand]
+    if date_from:
+        ratings = [rating for rating in ratings if rating['date'] >= date_from]
+    if date_to:
+        ratings = [rating for rating in ratings if rating['date'] <= date_to]
 
     if not ratings:
         return {'stores': [], 'threshold': threshold}
@@ -371,15 +534,20 @@ def api_low_rating(threshold: float = Query(40.0)):
 @app.get("/api/dsr")
 def api_dsr(
     store: str = Query(None),
+    brand: str = Query(None),
     date_from: str = Query(None),
     date_to: str = Query(None),
+    owner: str = Query(None),
 ):
     """DSR 数据"""
     data = load_all_data()
-    dsr = data['dsrData']
+    dsr = filter_by_owner(data, data['dsrData'], owner, '店铺名称')
 
     if store:
         dsr = [d for d in dsr if d.get('店铺名称', '') == store]
+    if brand:
+        brand_stores = set(data['brandStores'].get(brand, []))
+        dsr = [d for d in dsr if d.get('店铺名称', '') in brand_stores]
     if date_from:
         dsr = [d for d in dsr if str(d.get('日期', '')) >= date_from]
     if date_to:
@@ -392,10 +560,11 @@ def api_dsr(
 def api_dsr_averages(
     brand: str = Query(None),
     date: str = Query(None),
+    owner: str = Query(None),
 ):
     """DSR KPI 卡片：6 个维度的全店铺加权均值"""
     data = load_all_data()
-    dsr = data['dsrData']
+    dsr = filter_by_owner(data, data['dsrData'], owner, '店铺名称')
     if not dsr:
         return {'data': [], 'metrics': []}
 
@@ -443,11 +612,12 @@ def api_home_rating_overview(
     date_from: str = Query(None),
     date_to: str = Query(None),
     brand: str = Query(None),
+    owner: str = Query(None),
 ):
     """首页：近90天评分总览（加权平均，权重=各店铺当日商品数）"""
     data = load_all_data()
-    ratings = data['storeRatings']
-    products = data['products']
+    ratings = filter_by_owner(data, data['storeRatings'], owner)
+    products = filter_by_owner(data, data['products'], owner)
 
     if brand:
         brand_stores = set(data['brandStores'].get(brand, []))
@@ -485,10 +655,11 @@ def api_home_product_overview(
     date_from: str = Query(None),
     date_to: str = Query(None),
     brand: str = Query(None),
+    owner: str = Query(None),
 ):
     """首页：商品评分与评价数趋势（加权平均，权重=评价数）"""
     data = load_all_data()
-    products = data['products']
+    products = filter_by_owner(data, data['products'], owner)
 
     if brand:
         brand_stores = set(data['brandStores'].get(brand, []))

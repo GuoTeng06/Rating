@@ -104,6 +104,7 @@ def load_all_data(force=False):
         raise KeyError(f"店铺评分表缺少评分字段，实际字段：{list(cols2.keys())}")
 
     store_ratings = []
+    owner_col = next((name for name in ('负责人', '责任人', 'owner') if name in cols2), None)
     for row in cur.fetchall():
         rating_raw = str(row[cols2[rating_col]] or '').strip()
         store = str(row[cols2['店铺名称']] or '').strip()
@@ -113,7 +114,8 @@ def load_all_data(force=False):
         r = _pct(rating_raw)
         if r == 0: continue
         brand = _clean_brand(brand_raw, store)
-        store_ratings.append({'store': store, 'date': date, 'rating': r, 'brand': brand})
+        owner = str(row[cols2[owner_col]] or '').strip() if owner_col else ''
+        store_ratings.append({'store': store, 'date': date, 'rating': r, 'brand': brand, 'owner': owner})
         stores_set.add(store); dates_set.add(date)
 
     # 3. 综合体验星级
@@ -170,9 +172,12 @@ def load_all_data(force=False):
     all_brands = sorted(brands_set)
 
     store_brand = {}
+    store_owner = {}
     brand_stores = defaultdict(list)
     for sr in store_ratings:
         store_brand[sr['store']] = sr['brand']
+        if sr.get('owner'):
+            store_owner[sr['store']] = sr['owner']
         if sr['store'] not in brand_stores[sr['brand']]:
             brand_stores[sr['brand']].append(sr['store'])
     for p in products:
@@ -184,7 +189,7 @@ def load_all_data(force=False):
     result = {
         'stores': all_stores, 'dates': all_dates, 'brands': all_brands,
         'brandStores': {k: sorted(v) for k, v in brand_stores.items()},
-        'storeBrand': store_brand, 'storeRatings': store_ratings,
+        'storeBrand': store_brand, 'storeOwner': store_owner, 'storeRatings': store_ratings,
         'products': products, 'starData': star_data, 'dsrData': dsr_data,
     }
 
