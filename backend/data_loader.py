@@ -64,6 +64,18 @@ def load_all_data(force=False):
     conn = _get_conn()
     cur = conn.cursor()
 
+    # 店铺评分表是店铺状态的唯一来源。所有页面仅展示未退店店铺。
+    # 先读取有效店铺白名单，再过滤商品、店铺评分、星级和 DSR 数据，
+    # 避免只过滤某一个接口后，其他页面仍出现退店店铺。
+    cur.execute("SELECT * FROM `店铺评分表` WHERE COALESCE(`退店`, 0) = 0")
+    store_rating_rows = cur.fetchall()
+    store_rating_cols = {d[0]: i for i, d in enumerate(cur.description)}
+    active_stores = {
+        str(row[store_rating_cols['店铺名称']] or '').strip()
+        for row in store_rating_rows
+        if str(row[store_rating_cols['店铺名称']] or '').strip()
+    }
+
     # 1. 合并评分表
     cur.execute("SELECT * FROM `合并评分表`")
     cols = {d[0]: i for i, d in enumerate(cur.description)}
@@ -80,7 +92,7 @@ def load_all_data(force=False):
         date = str(row[cols['日期']] or '').strip()
         product_name = str(row[cols.get('商品名称', cols.get('product_name', ''))] or '').strip()
         product_code = str(row[cols.get('商品编码', cols.get('product_code', ''))] or '').strip()
-        if not item_id or not store or not date: continue
+        if not item_id or not store or not date or store not in active_stores: continue
         if '已下架' in title: continue
         r = _pct(rating_raw)
         if r == 0: continue
@@ -94,8 +106,7 @@ def load_all_data(force=False):
         stores_set.add(store); dates_set.add(date); brands_set.add(brand)
 
     # 2. 店铺评分表
-    cur.execute("SELECT * FROM `店铺评分表`")
-    cols2 = {d[0]: i for i, d in enumerate(cur.description)}
+    cols2 = store_rating_cols
     rating_col = next((
         name for name in ('店铺评价分排名', '近90天评分总览', '近90天评价总览')
         if name in cols2
@@ -105,7 +116,7 @@ def load_all_data(force=False):
 
     store_ratings = []
     owner_col = next((name for name in ('负责人', '责任人', 'owner') if name in cols2), None)
-    for row in cur.fetchall():
+    for row in store_rating_rows:
         rating_raw = str(row[cols2[rating_col]] or '').strip()
         store = str(row[cols2['店铺名称']] or '').strip()
         brand_raw = str(row[cols2['品牌']] or '').strip()
@@ -135,6 +146,8 @@ def load_all_data(force=False):
 
         s_store = str(store or '').strip()
         s_date = str(date or '').strip()
+        if s_store not in active_stores:
+            continue
 
         # 仅当店铺或日期变化时才创建新分组
         if not current or current['store'] != s_store or current['date'] != s_date:
@@ -157,7 +170,12 @@ def load_all_data(force=False):
         cols4 = {d[0]: i for i, d in enumerate(cur.description)}
         print(f"[MySQL] DSR columns: {list(cols4.keys())}")
         dsr_data = []
+        dsr_store_col = next((name for name in ('店铺名称', '店铺', 'store') if name in cols4), None)
         for row in cur.fetchall():
+            if dsr_store_col:
+                dsr_store = str(row[cols4[dsr_store_col]] or '').strip()
+                if dsr_store not in active_stores:
+                    continue
             item = {}
             for k, i in cols4.items():
                 item[k] = row[i]
