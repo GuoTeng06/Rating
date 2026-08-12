@@ -696,6 +696,13 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
+  function shortChartDate(value){
+    var text = String(value || '');
+    var match = text.match(/^\d{4}[-/.](\d{1,2})[-/.](\d{1,2})/);
+    if (!match) return text;
+    return String(match[1]).padStart(2,'0') + '-' + String(match[2]).padStart(2,'0');
+  }
+
   function fillSelect(id, items, first) {
     var sel = el(id); sel.innerHTML = '';
     if (first) { var opt = document.createElement('option'); opt.value = ''; opt.textContent = first; sel.appendChild(opt); }
@@ -1000,15 +1007,29 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
   }
 
   function loadAlerts(){
+    var requestBrand = selectedHomeBrand;
+    var alertSection = el('alert-section'), alertBar = el('alert-bar');
+    if (requestBrand === '白牌'){
+      if (alertSection) alertSection.style.display = 'none';
+      if (alertBar) alertBar.style.display = 'none';
+      return;
+    }
+    if (alertBar) alertBar.style.display = 'none';
     var alertUrl = '/api/low-rating?threshold=' + alertThreshold;
-    if (selectedHomeBrand) alertUrl += '&brand=' + encodeURIComponent(selectedHomeBrand);
+    if (requestBrand) alertUrl += '&brand=' + encodeURIComponent(requestBrand);
     if (brandDF) alertUrl += '&date_from=' + encodeURIComponent(brandDF);
     if (brandDT) alertUrl += '&date_to=' + encodeURIComponent(brandDT);
     if (selectedHomeOwner) alertUrl += '&owner=' + encodeURIComponent(selectedHomeOwner);
     getShared(alertUrl, function(err, d){
-    if (err) return;
+    if (err || requestBrand !== selectedHomeBrand) return;
     var list = d.stores || d.products || d.data || [];
     if (!Array.isArray(list)) list = [];
+    var hideSelectedBrandAlert = !!requestBrand && list.length === 0;
+    if (alertSection) alertSection.style.display = hideSelectedBrandAlert ? 'none' : 'flex';
+    if (hideSelectedBrandAlert){
+      if (alertBar) alertBar.style.display = 'none';
+      return;
+    }
     var lowKpi = el('kpi-low');
     if (lowKpi) lowKpi.textContent = list.length;
     var executiveCount = el('executive-alert-count');
@@ -1016,7 +1037,7 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
     if (executiveCount) executiveCount.textContent = list.length + ' 家';
     if (executiveMeta) executiveMeta.textContent = list.length ? '建议按评分从低到高处理' : '当前无低评分店铺';
     if (list.length > 0){
-      var bar = el('alert-bar');
+      var bar = alertBar;
       // DSR 面板激活时不显示预警
       var dsrPanel = el('dsr-panel');
       if (dsrPanel && dsrPanel.style.display !== 'none') { bar.style.display = 'none'; }
@@ -1034,6 +1055,9 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
           '<div style="font-size:22px;font-weight:700;color:'+rc+'">'+(p.rating||p.score||0).toFixed(1)+'%</div></div>';
       }
       el('alert-cards').innerHTML = cards;
+    } else if (alertBar) {
+      alertBar.style.display = 'none';
+      el('alert-cards').innerHTML = '';
     }
     log('✅ 预警: ' + list.length + '条', list.length>0?'#fa541c':'#52c41a');
     var pt = document.querySelector('#alert-panel h3');
@@ -1435,7 +1459,7 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
           formatter: function(v){return v != null ? v.toFixed(1)+'%' : '';},
           font:{size:9,weight:'600'}, color:function(ctx){return ctx.dataset.borderColor;},clamp:true};
       }
-      storeChart = new Chart(ctx, {type:'line', data:{labels:dates, datasets:datasets}, options:co, plugins:cp});
+      storeChart = new Chart(ctx, {type:'line', data:{labels:dates.map(shortChartDate), datasets:datasets}, options:co, plugins:cp});
       return;
     }
 
@@ -1477,7 +1501,7 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
         formatter: function(v){return v != null ? v.toFixed(1)+'%' : '';},
         font:{size:9,weight:'600'}, color:function(ctx){return ctx.dataset.borderColor;},clamp:true};
     }
-    storeChart = new Chart(ctx2, {type:'line', data:{labels:dates2, datasets:[{
+    storeChart = new Chart(ctx2, {type:'line', data:{labels:dates2.map(shortChartDate), datasets:[{
       label: label, data: vals, borderColor: '#1890ff', backgroundColor: '#1890ff20',
       tension: 0.3, pointRadius: 3, borderWidth: 2
     }]}, options:chartOpts, plugins:chartPlugins});
@@ -1960,7 +1984,7 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
       }
       if (canvasId==='trendRatingChart' && trendChartRating) trendChartRating.destroy();
       if (canvasId==='trendReviewChart' && trendChartReviews) trendChartReviews.destroy();
-      var c = new Chart(ctx, { type:'line', data:{labels:dates, datasets:ds}, options:opts, plugins:plugins });
+      var c = new Chart(ctx, { type:'line', data:{labels:dates.map(shortChartDate), datasets:ds}, options:opts, plugins:plugins });
       if (canvasId==='trendRatingChart') trendChartRating = c;
       if (canvasId==='trendReviewChart') trendChartReviews = c;
     }
@@ -2814,7 +2838,7 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
       var ctx = document.getElementById('hrc').getContext('2d');
       if (ratingChart) ratingChart.destroy();
       ratingChart = new Chart(ctx, {
-        type:'line', data:{labels:labels, datasets:[{label:'加权平均评分',data:values,borderColor:'#e02e24',backgroundColor:'rgba(224,46,36,.08)',fill:true,tension:.3,pointRadius:ratingSingleDay?6:0,pointHoverRadius:ratingSingleDay?7:5,borderWidth:2.5}]},
+        type:'line', data:{labels:labels.map(shortChartDate), datasets:[{label:'加权平均评分',data:values,borderColor:'#e02e24',backgroundColor:'rgba(224,46,36,.08)',fill:true,tension:.3,pointRadius:ratingSingleDay?6:0,pointHoverRadius:ratingSingleDay?7:5,borderWidth:2.5}]},
         options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'nearest'},onHover:function(evt,active,chart){var hovered=active.length?active[0].datasetIndex:null;if(chart.$hoverDataset!==hovered){chart.$hoverDataset=hovered;chart.update('none');}},plugins:{legend:{display:false},datalabels:{display:function(ctx){return ratingSingleDay || ctx.chart.$hoverDataset===ctx.datasetIndex;},formatter:function(value){return Number(value).toFixed(1)+'%';},align:'top',anchor:'end',clamp:true,color:'#c41d16',font:{size:9,weight:'600'}},tooltip:{mode:'index',intersect:false,callbacks:{label:function(ctx){return ' 店铺评分 '+ctx.parsed.y.toFixed(1)+'%';}}}},scales:{y:{suggestedMin:35,max:100,ticks:{callback:function(v){return v+'%';},stepSize:10}},x:{grid:{display:false}}}},
         plugins: hoverChartPlugins()
       });
@@ -2839,7 +2863,7 @@ body.preview-mode .preview-banner{display:flex;align-items:center;gap:8px}
       var ctx = document.getElementById('hpc').getContext('2d');
       if (productChart) productChart.destroy();
       productChart = new Chart(ctx, {
-        type:'line', data:{labels:labels, datasets:[
+        type:'line', data:{labels:labels.map(shortChartDate), datasets:[
           {label:'商品评分(%)',data:ratings,borderColor:'#e02e24',backgroundColor:'rgba(224,46,36,.07)',fill:true,tension:.3,pointRadius:productSingleDay?6:0,pointHoverRadius:productSingleDay?7:5,borderWidth:2.5,yAxisID:'y'},
           {label:'加权评价数',data:reviews,borderColor:'#98a2b3',tension:.3,pointRadius:productSingleDay?5:0,pointHoverRadius:productSingleDay?6:4,borderWidth:1.5,borderDash:[5,4],yAxisID:'y1'}
         ]},
@@ -3075,7 +3099,7 @@ function updateCoverageMetric(data){
       var ctx = document.getElementById('apc').getContext('2d');
       if (alertPopupChart) alertPopupChart.destroy();
       alertPopupChart = new Chart(ctx, {
-        type:'line', data:{labels:labels, datasets:[{label:isRating?'评分':'评价数',data:vals,borderColor:isRating?'#1890ff':'#fa8c16',backgroundColor:isRating?'rgba(24,144,255,.08)':'rgba(250,140,22,.08)',fill:true,tension:.3,pointRadius:3,pointHoverRadius:6,borderWidth:2}]},
+        type:'line', data:{labels:labels.map(shortChartDate), datasets:[{label:isRating?'评分':'评价数',data:vals,borderColor:isRating?'#1890ff':'#fa8c16',backgroundColor:isRating?'rgba(24,144,255,.08)':'rgba(250,140,22,.08)',fill:true,tension:.3,pointRadius:3,pointHoverRadius:6,borderWidth:2}]},
         options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'nearest'},onHover:function(evt,active,chart){var hovered=active.length?active[0].datasetIndex:null;if(chart.$hoverDataset!==hovered){chart.$hoverDataset=hovered;chart.update('none');}},plugins:{legend:{display:false},datalabels:{display:function(ctx){return ctx.chart.$hoverDataset===ctx.datasetIndex;},formatter:function(value){return isRating?Number(value).toFixed(1)+'%':Number(value).toLocaleString();},align:'top',anchor:'end',clamp:true,color:isRating?'#1677ff':'#d46b08',font:{size:10,weight:'600'}},tooltip:{mode:'index',intersect:false,callbacks:{label:function(ctx){return ' '+(isRating?'评分 '+Number(ctx.parsed.y).toFixed(1)+'%':'评价数 '+Number(ctx.parsed.y).toLocaleString());}}}},scales:{y:isRating?{min:0,max:105,ticks:{callback:function(v){return v+'%';},stepSize:20}}:{beginAtZero:false,ticks:{callback:function(v){return Number(v).toLocaleString();}}},x:{grid:{display:false},ticks:{callback:function(value){var label=this.getLabelForValue(value);return label&&label.length>=10?label.slice(5):label;}}}}},
         plugins: hoverChartPlugins()
       });
@@ -3103,7 +3127,7 @@ function updateCoverageMetric(data){
       '<div><span>区间评价变化</span><strong style="color:'+(reviewGrowth>=0?'#12b76a':'#d92d20')+'">'+(reviewGrowth>=0?'+':'')+reviewGrowth.toLocaleString()+'</strong></div>';
     el('alert-product-chart').innerHTML = '<canvas id="alert-product-canvas" style="width:100%;height:340px"></canvas>';
     if (alertPopupProductChart) alertPopupProductChart.destroy();
-    alertPopupProductChart = new Chart(document.getElementById('alert-product-canvas').getContext('2d'), {type:'line',data:{labels:series.dates,datasets:[
+    alertPopupProductChart = new Chart(document.getElementById('alert-product-canvas').getContext('2d'), {type:'line',data:{labels:series.dates.map(shortChartDate),datasets:[
       {label:'商品加权评分',data:series.ratings,borderColor:'#e02e24',backgroundColor:'rgba(224,46,36,.08)',fill:true,tension:.3,pointRadius:2,pointHoverRadius:5,yAxisID:'y'},
       {label:'评价总数',data:series.reviews,borderColor:'#98a2b3',borderDash:[5,4],backgroundColor:'transparent',tension:.25,pointRadius:0,pointHoverRadius:5,yAxisID:'y1'}
     ]},options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'nearest'},onHover:function(evt,active,chart){var hovered=active.length?active[0].datasetIndex:null;if(chart.$hoverDataset!==hovered){chart.$hoverDataset=hovered;chart.update('none');}},plugins:{datalabels:{display:function(ctx){return ctx.chart.$hoverDataset===ctx.datasetIndex;},formatter:function(value,ctx){return ctx.datasetIndex===0?Number(value).toFixed(1)+'%':Number(value).toLocaleString();},align:'top',anchor:'end',clamp:true,color:function(ctx){return ctx.dataset.borderColor;},font:{size:10,weight:'600'}},tooltip:{mode:'index',intersect:false,callbacks:{label:function(ctx){return ctx.datasetIndex===0?' 商品加权评分 '+Number(ctx.parsed.y).toFixed(1)+'%':' 评价总数 '+Number(ctx.parsed.y).toLocaleString();}}}},scales:{y:{position:'left',min:0,max:105,ticks:{callback:function(v){return v+'%';}}},y1:{position:'right',beginAtZero:false,grid:{drawOnChartArea:false},ticks:{callback:function(v){return Number(v).toLocaleString();}}},x:{grid:{display:false},ticks:{callback:function(value){var label=this.getLabelForValue(value);return label&&label.length>=10?label.slice(5):label;}}}}},plugins:hoverChartPlugins()});
@@ -3133,7 +3157,7 @@ function updateCoverageMetric(data){
     var canvas=el('alert-product-row-canvas'); if (!canvas) return;
     var history=alertPopupProducts.filter(function(p){return String(p.id||p.product_id||'')===String(productId);}).sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
     if (alertProductRowChart) alertProductRowChart.destroy();
-    alertProductRowChart = new Chart(canvas.getContext('2d'), {type:'line',data:{labels:history.map(function(p){return p.date;}),datasets:[
+    alertProductRowChart = new Chart(canvas.getContext('2d'), {type:'line',data:{labels:history.map(function(p){return shortChartDate(p.date);}),datasets:[
       {label:'评分',data:history.map(function(p){return Number(p.rating||0);}),borderColor:'#1677ff',backgroundColor:'rgba(22,119,255,.06)',fill:true,tension:.3,pointRadius:2,pointHoverRadius:5,yAxisID:'y'},
       {label:'评价数',data:history.map(function(p){return Number(p.reviews||0);}),borderColor:'#f79009',borderDash:[5,4],backgroundColor:'transparent',tension:.25,pointRadius:1,pointHoverRadius:5,yAxisID:'y1'}
     ]},options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'nearest'},onHover:function(evt,active,chart){var hovered=active.length?active[0].datasetIndex:null;if(chart.$hoverDataset!==hovered){chart.$hoverDataset=hovered;chart.update('none');}},plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:14}},datalabels:{display:function(ctx){return ctx.chart.$hoverDataset===ctx.datasetIndex;},formatter:function(value,ctx){return ctx.datasetIndex===0?Number(value).toFixed(1)+'%':Number(value).toLocaleString();},align:'top',anchor:'end',clamp:true,color:function(ctx){return ctx.dataset.borderColor;},font:{size:9,weight:'600'}},tooltip:{mode:'index',intersect:false,callbacks:{label:function(ctx){return ctx.datasetIndex===0?' 评分 '+Number(ctx.parsed.y).toFixed(1)+'%':' 评价数 '+Number(ctx.parsed.y).toLocaleString();}}}},scales:{y:{position:'left',min:0,max:105,ticks:{callback:function(v){return v+'%';}}},y1:{position:'right',beginAtZero:false,grid:{drawOnChartArea:false},ticks:{callback:function(v){return Number(v).toLocaleString();}}},x:{grid:{display:false},ticks:{callback:function(value){var label=this.getLabelForValue(value);return label&&label.length>=10?label.slice(5):label;}}}}},plugins:hoverChartPlugins()});
