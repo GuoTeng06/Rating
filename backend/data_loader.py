@@ -2,16 +2,18 @@
 拼多多评分看板 — MySQL 数据加载器
 """
 import os
+import re
+import threading
 import time
 from collections import defaultdict
 import pymysql
 
 DB_CONFIG = {
-    'host': os.environ.get('MYSQL_HOST', '192.168.16.38'),
+    'host': os.environ['MYSQL_HOST'],
     'port': int(os.environ.get('MYSQL_PORT', '3306')),
-    'user': os.environ.get('MYSQL_USER', 'user1'),
-    'password': os.environ.get('MYSQL_PASSWORD', '123456'),
-    'database': os.environ.get('MYSQL_DATABASE', 'pdd rating'),
+    'user': os.environ['MYSQL_USER'],
+    'password': os.environ['MYSQL_PASSWORD'],
+    'database': os.environ['MYSQL_DATABASE'],
     'charset': 'utf8mb4',
     'connect_timeout': 5,
 }
@@ -24,28 +26,55 @@ def _brand(store):
             return b
     return '白牌'
 
+def _clean_brand(value, store):
+    """Clean malformed brand values and infer a brand from the store name."""
+    brand = str(value or '').strip()
+    if (
+        not brand
+        or brand.lower() in {'none', 'null', 'nan'}
+        or re.fullmatch(r'\d{4}[-/.]\d{1,2}[-/.]\d{1,2}', brand)
+        or re.fullmatch(r'\d+(?:\.0+)?', brand)
+    ):
+        return _brand(store)
+    return brand
+
 def _pct(val):
     if val is None: return 0
-    s = str(val).strip().rstrip('%')
+    s = str(val).strip()
+    m = re.search(r'([\d.]+)\s*%', s)
+    if m:
+        return float(m.group(1))
+    s = s.rstrip('%')
     try: return float(s)
     except: return 0
 
 _cache = None
 _cache_time = 0
+_cache_refreshing = False
+_cache_refresh_lock = threading.Lock()
 CACHE_TTL = 300
 
 def _get_conn():
     return pymysql.connect(**DB_CONFIG)
 
 
-def load_all_data(force=False):
+def _load_all_data_from_db():
     global _cache, _cache_time
     now = time.time()
-    if not force and _cache is not None and (now - _cache_time) < CACHE_TTL:
-        return _cache
-
     conn = _get_conn()
     cur = conn.cursor()
+
+    # 店铺评分表是店铺状态的唯一来源。所有页面仅展示未退店店铺。
+    # 先读取有效店铺白名单，再过滤商品、店铺评分、星级和 DSR 数据，
+    # 避免只过滤某一个接口后，其他页面仍出现退店店铺。
+    cur.execute("SELECT * FROM `店铺评分表` WHERE COALESCE(`退店`, 0) = 0")
+    store_rating_rows = cur.fetchall()
+    store_rating_cols = {d[0]: i for i, d in enumerate(cur.description)}
+    active_stores = {
+        str(row[store_rating_cols['店铺名称']] or '').strip()
+        for row in store_rating_rows
+        if str(row[store_rating_cols['店铺名称']] or '').strip()
+    }
 
     # 1. 合并评分表
     cur.execute("SELECT * FROM `合并评分表`")
@@ -63,7 +92,7 @@ def load_all_data(force=False):
         date = str(row[cols['日期']] or '').strip()
         product_name = str(row[cols.get('商品名称', cols.get('product_name', ''))] or '').strip()
         product_code = str(row[cols.get('商品编码', cols.get('product_code', ''))] or '').strip()
-        if not item_id or not store or not date: continue
+        if not item_id or not store or not date or store not in active_stores: continue
         if '已下架' in title: continue
         r = _pct(rating_raw)
         if r == 0: continue
@@ -72,24 +101,32 @@ def load_all_data(force=False):
         seen.add(key)
         try: rev = int(float(reviews_raw))
         except: rev = 0
-        brand = brand_raw if brand_raw and brand_raw != 'None' else _brand(store)
+        brand = _clean_brand(brand_raw, store)
         products.append({'id': item_id, 'title': title, 'rating': r, 'reviews': rev, 'store': store, 'brand': brand, 'date': date, 'product_name': product_name, 'product_code': product_code})
         stores_set.add(store); dates_set.add(date); brands_set.add(brand)
 
     # 2. 店铺评分表
-    cur.execute("SELECT * FROM `店铺评分表`")
-    cols2 = {d[0]: i for i, d in enumerate(cur.description)}
+    cols2 = store_rating_cols
+    rating_col = next((
+        name for name in ('店铺评价分排名', '近90天评分总览', '近90天评价总览')
+        if name in cols2
+    ), None)
+    if rating_col is None:
+        raise KeyError(f"店铺评分表缺少评分字段，实际字段：{list(cols2.keys())}")
+
     store_ratings = []
-    for row in cur.fetchall():
-        rating_raw = str(row[cols2['近90天评分总览']] or '').strip()
+    owner_col = next((name for name in ('负责人', '责任人', 'owner') if name in cols2), None)
+    for row in store_rating_rows:
+        rating_raw = str(row[cols2[rating_col]] or '').strip()
         store = str(row[cols2['店铺名称']] or '').strip()
         brand_raw = str(row[cols2['品牌']] or '').strip()
         date = str(row[cols2['日期']] or '').strip()
         if not store or not date: continue
         r = _pct(rating_raw)
         if r == 0: continue
-        brand = brand_raw if brand_raw and brand_raw != 'None' else _brand(store)
-        store_ratings.append({'store': store, 'date': date, 'rating': r, 'brand': brand})
+        brand = _clean_brand(brand_raw, store)
+        owner = str(row[cols2[owner_col]] or '').strip() if owner_col else ''
+        store_ratings.append({'store': store, 'date': date, 'rating': r, 'brand': brand, 'owner': owner})
         stores_set.add(store); dates_set.add(date)
 
     # 3. 综合体验星级
@@ -109,6 +146,8 @@ def load_all_data(force=False):
 
         s_store = str(store or '').strip()
         s_date = str(date or '').strip()
+        if s_store not in active_stores:
+            continue
 
         # 仅当店铺或日期变化时才创建新分组
         if not current or current['store'] != s_store or current['date'] != s_date:
@@ -118,7 +157,7 @@ def load_all_data(force=False):
                 'store': s_store,
                 'date': s_date,
                 'star': s_star,
-                'brand': s_brand if s_brand and s_brand != 'None' else _brand(s_store),
+                'brand': _clean_brand(s_brand, s_store),
                 'items': []
             }
             star_data.append(current)
@@ -131,7 +170,12 @@ def load_all_data(force=False):
         cols4 = {d[0]: i for i, d in enumerate(cur.description)}
         print(f"[MySQL] DSR columns: {list(cols4.keys())}")
         dsr_data = []
+        dsr_store_col = next((name for name in ('店铺名称', '店铺', 'store') if name in cols4), None)
         for row in cur.fetchall():
+            if dsr_store_col:
+                dsr_store = str(row[cols4[dsr_store_col]] or '').strip()
+                if dsr_store not in active_stores:
+                    continue
             item = {}
             for k, i in cols4.items():
                 item[k] = row[i]
@@ -146,9 +190,12 @@ def load_all_data(force=False):
     all_brands = sorted(brands_set)
 
     store_brand = {}
+    store_owner = {}
     brand_stores = defaultdict(list)
     for sr in store_ratings:
         store_brand[sr['store']] = sr['brand']
+        if sr.get('owner'):
+            store_owner[sr['store']] = sr['owner']
         if sr['store'] not in brand_stores[sr['brand']]:
             brand_stores[sr['brand']].append(sr['store'])
     for p in products:
@@ -160,13 +207,44 @@ def load_all_data(force=False):
     result = {
         'stores': all_stores, 'dates': all_dates, 'brands': all_brands,
         'brandStores': {k: sorted(v) for k, v in brand_stores.items()},
-        'storeBrand': store_brand, 'storeRatings': store_ratings,
+        'storeBrand': store_brand, 'storeOwner': store_owner, 'storeRatings': store_ratings,
         'products': products, 'starData': star_data, 'dsrData': dsr_data,
     }
 
     _cache = result; _cache_time = now
     print(f"[MySQL] products={len(products)}, storeRatings={len(store_ratings)}, stores={len(all_stores)}, dates={len(all_dates)}, starData={len(star_data)}")
     return result
+
+
+def _refresh_cache_in_background():
+    global _cache_refreshing
+    try:
+        _load_all_data_from_db()
+    except Exception as exc:
+        # Keep serving the previous valid snapshot when a background refresh
+        # fails; the next request after TTL will retry the refresh.
+        print(f"[MySQL] background refresh failed: {exc}")
+    finally:
+        with _cache_refresh_lock:
+            _cache_refreshing = False
+
+
+def load_all_data(force=False):
+    """Return the cached snapshot and refresh stale data without blocking users."""
+    global _cache_refreshing
+    now = time.time()
+    if not force and _cache is not None:
+        if (now - _cache_time) >= CACHE_TTL:
+            with _cache_refresh_lock:
+                if not _cache_refreshing:
+                    _cache_refreshing = True
+                    threading.Thread(
+                        target=_refresh_cache_in_background,
+                        name="dashboard-cache-refresh",
+                        daemon=True,
+                    ).start()
+        return _cache
+    return _load_all_data_from_db()
 
 
 def get_summary(data=None):
